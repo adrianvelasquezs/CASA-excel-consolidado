@@ -4,9 +4,10 @@ Mismo cronograma consolidado, pero con permisos **por cuenta institucional** en 
 
 | Archivo | Para qué |
 |---|---|
-| `../salida/Cronograma 2027 Bloque Neón - Google Sheets.xlsx` | Plantilla que se importa a Google Sheets (sin contraseñas). Se genera con `uv run scripts/generar_google_sheets.py` |
-| `Codigo.gs` | Apps Script que aplica los permisos y registra la propiedad de las filas |
-| `appsscript.json` | Manifiesto del script (zona horaria America/Bogota) |
+| `generar_plantilla.py` | Genera la plantilla a partir de `../raw/`: `uv run google-sheets/generar_plantilla.py` |
+| `salida/Cronograma 2027 Bloque Neón - Google Sheets.xlsx` | Plantilla que se importa a Google Sheets (sin contraseñas) |
+| `apps-script/Codigo.gs` | Apps Script que aplica los permisos y registra la propiedad de las filas |
+| `apps-script/appsscript.json` | Manifiesto del script (zona horaria America/Bogota) |
 
 ## Cómo funciona
 
@@ -44,15 +45,15 @@ En la columna Programa(s), varios programas van separados por coma (`AFIN, MF`).
 
 Hágalo con una cuenta **@uniandes.edu.co de CASA**, idealmente la que será dueña del archivo. Esa cuenta queda como ADMIN automático y es la que ejecuta los disparadores.
 
-1. **Generar la plantilla** (o usar la que ya está en `salida/`):
+1. **Generar la plantilla** (o usar la que ya está en `google-sheets/salida/`):
    ```bash
-   uv run scripts/generar_google_sheets.py
+   uv run google-sheets/generar_plantilla.py
    ```
 2. **Importar a Google Sheets.** En Google Drive: *Nuevo → Subir archivo* y luego *Abrir con → Hojas de cálculo de Google*. O bien en Sheets: *Archivo → Importar → Subir*, eligiendo "Reemplazar hoja de cálculo". Trabaje sobre el archivo de Google Sheets, no sobre el .xlsx.
 3. **Llenar la hoja Usuarios.** Incluya al menos a los ADMIN y al equipo CASA. Si el archivo está en una **unidad compartida** (sin dueño), agréguese usted como `ADMIN` antes del paso 5.
 4. **Instalar el script.** En el archivo: *Extensiones → Apps Script*.
-   - Reemplace el contenido de `Código.gs` por el de [`Codigo.gs`](Codigo.gs).
-   - En ⚙ *Configuración del proyecto*, marque "Mostrar el archivo de manifiesto appsscript.json" y pegue el contenido de [`appsscript.json`](appsscript.json).
+   - Reemplace el contenido de `Código.gs` por el de [`apps-script/Codigo.gs`](apps-script/Codigo.gs).
+   - En ⚙ *Configuración del proyecto*, marque "Mostrar el archivo de manifiesto appsscript.json" y pegue el contenido de [`apps-script/appsscript.json`](apps-script/appsscript.json).
    - Guarde y recargue la hoja de cálculo. Aparece el menú **CASA**.
    - (Opcional) Con [clasp](https://github.com/google/clasp): `clasp clone <scriptId>`, copie estos dos archivos y ejecute `clasp push`.
 5. **CASA → 1. Configurar libro.** Autorice los permisos que pide Google. Esto escribe la fórmula del Consolidado, crea las protecciones e instala los disparadores. Revise el resumen: avisa de roles inválidos, programas inexistentes y correos externos.

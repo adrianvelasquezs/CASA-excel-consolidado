@@ -2,21 +2,25 @@
 Genera el Excel consolidado (OneDrive / SharePoint) del Cronograma 2027 Bloque
 Neón a partir de las plantillas de raw/ (que nunca se modifican).
 
+Entradas:
+  raw/*.xlsx                         plantillas por programa
+  onedrive/config/profesores.csv     filas reservadas por profesor (opcional)
+
 Resultado:
-  salida/Cronograma 2027 Bloque Neón - Consolidado.xlsx
-  privado/contrasenas.csv   (se reutiliza si ya existe; NO compartir)
+  onedrive/salida/Cronograma 2027 Bloque Neón - Consolidado.xlsx
+  onedrive/privado/contrasenas.csv   (se reutiliza si ya existe; NO compartir)
 
 Modelo de permisos (protección de hoja + rangos con contraseña):
   - Encabezados, leyenda, columna "Programa" y hoja Consolidado: bloqueados
     (solo la contraseña de administrador desbloquea).
   - Columnas azules (Programa) de cada hoja: contraseña propia del programa.
-  - Filas asignadas a un profesor en config/profesores.csv: contraseña propia
-    de ese profesor (el programa ya no puede editarlas).
+  - Filas asignadas a un profesor en onedrive/config/profesores.csv: contraseña
+    propia de ese profesor (el programa ya no puede editarlas).
   - Columnas verdes (CASA) en todas las hojas: contraseña del equipo CASA.
   - Estructura del libro bloqueada (no se pueden borrar/renombrar hojas).
 
-Uso:
-  uv run scripts/generar_excel.py [--filas 150]
+Uso (desde la raíz del proyecto):
+  uv run onedrive/generar_excel.py [--filas 150]
 """
 
 import argparse
@@ -33,13 +37,13 @@ from pathlib import Path
 import xlsxwriter
 from xlsxwriter.utility import xl_col_to_name, xl_rowcol_to_cell
 
-from plantillas import (
+AQUI = Path(__file__).resolve().parent
+sys.path.insert(0, str(AQUI.parent / "comun"))
+
+from plantillas import (  # noqa: E402
     COLUMNAS_CLAVE,
-    CONFIG_DIR,
     PRIMERA_FILA_DATOS,
-    PRIVADO_DIR,
     ROOT,
-    SALIDA_DIR,
     crear_formatos,
     escribir_base_programa,
     escribir_encabezados_consolidado,
@@ -48,6 +52,10 @@ from plantillas import (
     referencia_hoja,
     unificar_columnas,
 )
+
+CONFIG_DIR = AQUI / "config"
+PRIVADO_DIR = AQUI / "privado"
+SALIDA_DIR = AQUI / "salida"
 
 ARCHIVO_SALIDA = SALIDA_DIR / "Cronograma 2027 Bloque Neón - Consolidado.xlsx"
 ARCHIVO_PROFESORES = CONFIG_DIR / "profesores.csv"

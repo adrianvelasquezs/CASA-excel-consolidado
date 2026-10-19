@@ -1,6 +1,7 @@
 """
 Lectura de las plantillas de raw/ y escritura de la estructura común de las
-hojas de programa. Lo usan generar_excel.py y generar_google_sheets.py.
+hojas de programa. Lo usan onedrive/generar_excel.py y
+google-sheets/generar_plantilla.py.
 """
 
 import re
@@ -12,9 +13,6 @@ from xlsxwriter.utility import xl_col_to_name
 
 ROOT = Path(__file__).resolve().parent.parent
 RAW_DIR = ROOT / "raw"
-CONFIG_DIR = ROOT / "config"
-PRIVADO_DIR = ROOT / "privado"
-SALIDA_DIR = ROOT / "salida"
 
 FILA_ENCABEZADO = 2  # índice 0 -> fila 3 de Excel, igual que en las plantillas
 PRIMERA_FILA_DATOS = 3  # índice 0 -> fila 4 de Excel

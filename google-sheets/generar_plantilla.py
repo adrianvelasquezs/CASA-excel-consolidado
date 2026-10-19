@@ -2,24 +2,31 @@
 Genera la plantilla para Google Sheets del Cronograma 2027 Bloque Neón a partir
 de raw/ (que nunca se modifica).
 
+Entradas:
+  raw/*.xlsx   plantillas por programa
+
 Resultado:
-  salida/Cronograma 2027 Bloque Neón - Google Sheets.xlsx
+  google-sheets/salida/Cronograma 2027 Bloque Neón - Google Sheets.xlsx
 
 El archivo NO lleva contraseñas ni protecciones de Excel: se importa a Google
-Sheets y los permisos los aplica el Apps Script de google-sheets/ según los
-correos registrados en la hoja «Usuarios».
+Sheets y los permisos los aplica el Apps Script de google-sheets/apps-script/
+según los correos registrados en la hoja «Usuarios».
 
-Uso:
-  uv run scripts/generar_google_sheets.py [--filas 150]
+Uso (desde la raíz del proyecto):
+  uv run google-sheets/generar_plantilla.py [--filas 150]
 """
 
 import argparse
+import sys
+from pathlib import Path
 
 import xlsxwriter
 
-from plantillas import (
+AQUI = Path(__file__).resolve().parent
+sys.path.insert(0, str(AQUI.parent / "comun"))
+
+from plantillas import (  # noqa: E402
     ROOT,
-    SALIDA_DIR,
     crear_formatos,
     escribir_base_programa,
     escribir_encabezados_consolidado,
@@ -28,9 +35,10 @@ from plantillas import (
     unificar_columnas,
 )
 
+SALIDA_DIR = AQUI / "salida"
 ARCHIVO_SALIDA = SALIDA_DIR / "Cronograma 2027 Bloque Neón - Google Sheets.xlsx"
 
-# Deben coincidir con CONFIG en google-sheets/Codigo.gs
+# Deben coincidir con CONFIG en google-sheets/apps-script/Codigo.gs
 COLUMNAS_SISTEMA = ("Registrado por", "Fecha de registro")
 ROLES = ["ADMIN", "CASA", "GESTOR", "PROFESOR"]
 FILAS_USUARIOS = 500
