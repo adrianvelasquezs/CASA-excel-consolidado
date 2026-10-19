@@ -1,22 +1,20 @@
 """
-Lectura de las plantillas de raw/ y escritura de la estructura común de las
-hojas de programa. Lo usan onedrive/generar_excel.py y
-google-sheets/generar_plantilla.py.
+Lectura de las plantillas por programa y escritura de la estructura común de
+las hojas. Lo usan las dos versiones (onedrive y google_sheets).
+
+Nada aquí asume rutas fijas: las plantillas llegan como una lista de archivos
+o carpetas elegidos por el usuario.
 """
 
-import json
 import re
-import sys
 from pathlib import Path
 
 import openpyxl
 from xlsxwriter.utility import xl_col_to_name
 
-ROOT = Path(__file__).resolve().parent.parent
-RAW_DIR = ROOT / "raw"
-
 FILA_ENCABEZADO = 2  # índice 0 -> fila 3 de Excel, igual que en las plantillas
 PRIMERA_FILA_DATOS = 3  # índice 0 -> fila 4 de Excel
+FILAS_MIN, FILAS_MAX = 10, 2000
 
 AZUL_RAW = "FF00B0F0"
 AZUL = "#00B0F0"
@@ -44,38 +42,71 @@ COLUMNAS_CONTEO = {
 # registrada (columna Programa y hoja Consolidado).
 COLUMNAS_CLAVE = ("Código de curso", "CRN", "Curso")
 
-
-AJUSTES_POR_DEFECTO = {"filas": 150}
-
-
-def leer_ajustes(ruta):
-    """Lee config/ajustes.json de una plataforma; si no existe o está dañado usa los valores por defecto."""
-    ajustes = dict(AJUSTES_POR_DEFECTO)
-    try:
-        ajustes.update(json.loads(Path(ruta).read_text(encoding="utf-8")))
-    except (OSError, ValueError):
-        pass
-    return ajustes
+HOJAS_RESERVADAS = {"instrucciones", "consolidado", "usuarios", "_auditoria"}
 
 
-def guardar_ajustes(ruta, ajustes):
-    Path(ruta).parent.mkdir(parents=True, exist_ok=True)
-    Path(ruta).write_text(json.dumps(ajustes, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+class ErrorGeneracion(Exception):
+    """Error con un mensaje pensado para mostrarse tal cual al usuario."""
+
+
+def carpeta_plantillas_incluidas():
+    """Plantillas que vienen dentro de la app (o raw/ del repositorio al desarrollar). None si no hay."""
+    empaquetadas = Path(__file__).resolve().parent.parent / "plantillas_incluidas"
+    if empaquetadas.is_dir():
+        return empaquetadas
+    repositorio = Path(__file__).resolve().parents[3] / "raw"
+    return repositorio if repositorio.is_dir() else None
 
 
 def normalizar(texto):
     return re.sub(r"\s+", " ", str(texto)).strip()
 
 
-def leer_plantillas():
-    """Devuelve {programa: [(encabezado, es_azul), ...]} y el ancho de cada columna."""
+def programa_de(archivo):
+    """«AFIN Cronograma 2027 Bloque Neón.xlsx» -> «AFIN»."""
+    return Path(archivo).stem.split(" ")[0].strip()
+
+
+def expandir_rutas(rutas):
+    """Convierte archivos y carpetas en la lista ordenada de plantillas .xlsx."""
+    archivos = []
+    for ruta in rutas:
+        ruta = Path(ruta)
+        if ruta.is_dir():
+            archivos += sorted(p for p in ruta.glob("*.xlsx") if not p.name.startswith("~$"))
+        elif ruta.is_file() and ruta.suffix.lower() == ".xlsx" and not ruta.name.startswith("~$"):
+            archivos.append(ruta)
+        elif not ruta.exists():
+            raise ErrorGeneracion(f"No existe: {ruta}")
+    if not archivos:
+        raise ErrorGeneracion("No se eligió ninguna plantilla .xlsx.")
+    return archivos
+
+
+def validar_programa(programa, archivo):
+    if not programa:
+        raise ErrorGeneracion(f"No se pudo obtener el programa del nombre de archivo «{archivo.name}».")
+    if len(programa) > 31 or re.search(r"[\[\]:*?/\\']", programa):
+        raise ErrorGeneracion(f"«{programa}» (de {archivo.name}) no sirve como nombre de hoja: máximo 31 "
+                              "caracteres y sin [ ] : * ? / \\ '")
+    if programa.lower() in HOJAS_RESERVADAS:
+        raise ErrorGeneracion(f"«{programa}» es un nombre de hoja reservado; renombre {archivo.name}.")
+
+
+def leer_plantillas(rutas):
+    """Devuelve ({programa: [(encabezado, es_azul), ...]}, {encabezado: ancho})."""
     plantillas = {}
+    origen = {}
     anchos = {}
-    for archivo in sorted(RAW_DIR.glob("*.xlsx")):
-        if archivo.name.startswith("~$"):
-            continue
-        programa = archivo.name.split(" ")[0]
-        ws = openpyxl.load_workbook(archivo, read_only=False).worksheets[0]
+    for archivo in expandir_rutas(rutas):
+        programa = programa_de(archivo)
+        validar_programa(programa, archivo)
+        if programa in plantillas:
+            raise ErrorGeneracion(f"Hay dos plantillas del programa «{programa}»: {origen[programa].name} y {archivo.name}.")
+        try:
+            ws = openpyxl.load_workbook(archivo, read_only=False).worksheets[0]
+        except Exception as error:  # archivo dañado, protegido o que no es Excel
+            raise ErrorGeneracion(f"No se pudo leer {archivo.name}: {error}") from error
         columnas = []
         for celda in ws[FILA_ENCABEZADO + 1]:
             if celda.value is None:
@@ -86,14 +117,15 @@ def leer_plantillas():
             ancho = ws.column_dimensions[celda.column_letter].width
             if ancho and normalizar(celda.value) not in anchos:
                 anchos[normalizar(celda.value)] = ancho
+        if "Programa" not in [n for n, _ in columnas]:
+            raise ErrorGeneracion(f"{archivo.name} no tiene la fila de encabezados esperada (fila 3, columna «Programa»).")
         plantillas[programa] = columnas
-    if not plantillas:
-        sys.exit(f"No se encontraron plantillas .xlsx en {RAW_DIR}")
+        origen[programa] = archivo
     return plantillas, anchos
 
 
 def unificar_columnas(plantillas):
-    """Une los encabezados de todas las plantillas conservando el orden original."""
+    """Une los encabezados de todas las plantillas conservando el orden original. Devuelve (columnas, avisos)."""
     unificadas = []
     for columnas in plantillas.values():
         for i, (nombre, es_azul) in enumerate(columnas):
@@ -101,17 +133,23 @@ def unificar_columnas(plantillas):
             if nombre in existentes:
                 previo = next(c for c in unificadas if c[0] == nombre)
                 if previo[1] != es_azul:
-                    sys.exit(f"La columna '{nombre}' tiene colores distintos entre plantillas")
+                    raise ErrorGeneracion(f"La columna «{nombre}» tiene colores distintos entre plantillas.")
                 continue
             # Insertar después de la columna que la precede en esta plantilla.
             anterior = columnas[i - 1][0] if i > 0 else None
             pos = existentes.index(anterior) + 1 if anterior in existentes else len(unificadas)
             unificadas.insert(pos, (nombre, es_azul))
+    avisos = []
     for programa, cols in plantillas.items():
         faltan = [c for c, _ in unificadas if c not in {n for n, _ in cols}]
         if faltan:
-            print(f"Aviso: {programa} no tenía {faltan}; se agregan para unificar.")
-    return unificadas
+            avisos.append(f"Aviso: {programa} no tenía {faltan}; se agregan para unificar.")
+    return unificadas, avisos
+
+
+def validar_filas(filas):
+    if not isinstance(filas, int) or not FILAS_MIN <= filas <= FILAS_MAX:
+        raise ErrorGeneracion(f"Las filas por programa deben estar entre {FILAS_MIN} y {FILAS_MAX}.")
 
 
 def referencia_hoja(hoja):
@@ -227,8 +265,8 @@ def escribir_encabezados_consolidado(wb, f, columnas, anchos, columnas_sistema=(
     for j, nombre in enumerate(columnas_sistema):
         ws.write(FILA_ENCABEZADO, len(columnas) + j, nombre, f["enc_gris"])
         ws.set_column(len(columnas) + j, len(columnas) + j, 30)
-    ws.freeze_panes(PRIMERA_FILA_DATOS, [n for n, _ in columnas].index("Profesor") + 1
-                    if "Profesor" in [n for n, _ in columnas] else 5)
+    nombres = [n for n, _ in columnas]
+    ws.freeze_panes(PRIMERA_FILA_DATOS, nombres.index("Profesor") + 1 if "Profesor" in nombres else 5)
     return ws
 
 
@@ -236,3 +274,18 @@ def escribir_lineas(ws, f, lineas):
     ws.set_column(0, 0, 110)
     for r, (estilo, texto) in enumerate(lineas):
         ws.write(r, 0, texto, f[estilo])
+
+
+def reemplazar_archivo(origen, destino):
+    """Mueve el archivo temporal al destino elegido, con un mensaje claro si está abierto o sin permisos."""
+    destino = Path(destino)
+    try:
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        Path(origen).replace(destino)
+    except OSError:
+        try:
+            import shutil
+            shutil.move(str(origen), str(destino))  # otro disco o unidad
+        except OSError as error:
+            raise ErrorGeneracion(f"No se pudo guardar {destino.name} en {destino.parent}. "
+                                  f"¿Está abierto en otro programa o la carpeta es de solo lectura? ({error})") from error

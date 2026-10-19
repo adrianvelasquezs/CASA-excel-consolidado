@@ -1,0 +1,122 @@
+# Pruebas + ejecutables para Windows y macOS en cada push y pull request.
+# Al subir un tag vX.Y.Z (igual a __version__ en src/cronograma_neon/__init__.py) se crea un release
+# con los dos ejecutables: el .exe de Windows y el .app de macOS dentro de un .zip.
+name: Compilar y publicar
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  compilar:
+    name: ${{ matrix.nombre }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            nombre: Windows
+          - os: macos-latest
+            nombre: macOS
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      # Python de python.org/actions (incluye Tcl/Tk) y uv usando ese mismo intérprete.
+      - id: python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@v6
+      - name: Instalar dependencias
+        env:
+          UV_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: uv sync --frozen --group build
+
+      - name: Versión
+        id: version
+        run: echo "valor=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/cronograma_neon/__init__.py)" >> "$GITHUB_OUTPUT"
+
+      - name: Pruebas
+        run: uv run --frozen --no-sync pytest -q
+
+      - name: Compilar ejecutable
+        run: uv run --frozen --no-sync pyinstaller --noconfirm --clean empaquetado/cronograma_neon.spec
+
+      - name: Probar el .app y comprimirlo (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          APP="dist/Cronograma Neon.app"
+          "$APP/Contents/MacOS/Cronograma Neon" verificar --informe informe.txt
+          cat informe.txt
+          echo "Arquitecturas: $(lipo -archs "$APP/Contents/MacOS/Cronograma Neon")"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "Cronograma-Neon-${{ steps.version.outputs.valor }}-macOS.zip"
+
+      - name: Probar el .exe (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Es una app de ventana: Start-Process -Wait espera a que termine para leer el código de salida.
+          $p = Start-Process -FilePath "dist\Cronograma Neon.exe" -ArgumentList "verificar","--informe","informe.txt" -Wait -PassThru -NoNewWindow
+          Get-Content informe.txt
+          if ($p.ExitCode -ne 0) { throw "La verificación falló con código $($p.ExitCode)" }
+          Copy-Item "dist\Cronograma Neon.exe" "Cronograma-Neon-${{ steps.version.outputs.valor }}-Windows.exe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Cronograma-Neon-${{ matrix.nombre }}
+          path: Cronograma-Neon-*
+          if-no-files-found: error
+
+  publicar:
+    name: Publicar release
+    needs: compilar
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Verificar que el tag coincide con la versión
+        run: |
+          VERSION=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/cronograma_neon/__init__.py)
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::El tag $GITHUB_REF_NAME no coincide con __version__ = $VERSION"
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artefactos
+          merge-multiple: true
+
+      - name: Crear release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notas.md <<'EOF'
+          ## Descarga
+
+          - **Windows:** `Cronograma-Neon-…-Windows.exe`. Si aparece "Windows protegió su PC", haga clic en *Más información → Ejecutar de todas formas*.
+          - **macOS:** descomprima `Cronograma-Neon-…-macOS.zip` y mueva **Cronograma Neon.app** a Aplicaciones. La primera vez, si macOS bloquea la app, vaya a *Configuración del Sistema → Privacidad y seguridad → Abrir de todas formas*.
+
+          La app no está firmada con un certificado de Microsoft ni de Apple; por eso aparecen esas advertencias.
+          EOF
+          gh release create "$GITHUB_REF_NAME" artefactos/* \
+            --title "Cronograma Neón $GITHUB_REF_NAME" \
+            --notes-file notas.md \
+            --generate-notes

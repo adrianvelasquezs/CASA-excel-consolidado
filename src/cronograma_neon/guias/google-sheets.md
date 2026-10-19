@@ -2,12 +2,14 @@
 
 Mismo cronograma consolidado, pero con permisos **por cuenta institucional** en lugar de contraseñas. Es la única de las dos versiones que cumple de forma real que lo que registra un profesor no lo pueda modificar otro.
 
-| Archivo | Para qué |
-|---|---|
-| `generar_plantilla.py` | Genera la plantilla a partir de `../raw/`: `uv run google-sheets/generar_plantilla.py` |
-| `salida/Cronograma 2027 Bloque Neón - Google Sheets.xlsx` | Plantilla que se importa a Google Sheets (sin contraseñas) |
-| `apps-script/Codigo.gs` | Apps Script que aplica los permisos y registra la propiedad de las filas |
-| `apps-script/appsscript.json` | Manifiesto del script (zona horaria America/Bogota) |
+Pestaña **Google Sheets** de la app. **Qué se carga y qué se guarda** (siempre donde usted elija):
+
+| | Botón | Archivo |
+|---|---|---|
+| Entrada | *Elegir archivos… / Elegir carpeta…* (arriba) | Plantillas .xlsx de los programas (o las incluidas en la app) |
+| Salida | *Generar plantilla para Google Sheets…* | Plantilla que se importa a Google Sheets (sin contraseñas) |
+| Salida | *Guardar Codigo.gs… / Copiar Codigo.gs* | Apps Script que aplica los permisos, con la configuración de la sección 2 ya aplicada |
+| Salida | *Guardar appsscript.json… / Copiar appsscript.json* | Manifiesto del script (zona horaria America/Bogota) |
 
 ## Cómo funciona
 
@@ -31,7 +33,7 @@ En la columna Programa(s), varios programas van separados por coma (`AFIN, MF`).
    - avisa por correo a los ADMIN,
    - restaura las protecciones de esa hoja.
 
-   Además, cada noche (2 a. m.) se restauran todas las protecciones.
+   Además, cada noche se restauran todas las protecciones (a las 2 a. m. por defecto; la hora se cambia en la app).
 
 ## Particularidades de Uniandes (Google Workspace + correo en Microsoft)
 
@@ -45,17 +47,14 @@ En la columna Programa(s), varios programas van separados por coma (`AFIN, MF`).
 
 Hágalo con una cuenta **@uniandes.edu.co de CASA**, idealmente la que será dueña del archivo. Esa cuenta queda como ADMIN automático y es la que ejecuta los disparadores.
 
-1. **Generar la plantilla** (o usar la que ya está en `google-sheets/salida/`):
-   ```bash
-   uv run google-sheets/generar_plantilla.py
-   ```
+1. **Generar la plantilla.** En la app, pestaña *Google Sheets*: revise el dominio y las opciones del Apps Script, clic en **Generar plantilla para Google Sheets…** y elija dónde guardarla.
 2. **Importar a Google Sheets.** En Google Drive: *Nuevo → Subir archivo* y luego *Abrir con → Hojas de cálculo de Google*. O bien en Sheets: *Archivo → Importar → Subir*, eligiendo "Reemplazar hoja de cálculo". Trabaje sobre el archivo de Google Sheets, no sobre el .xlsx.
 3. **Llenar la hoja Usuarios.** Incluya al menos a los ADMIN y al equipo CASA. Si el archivo está en una **unidad compartida** (sin dueño), agréguese usted como `ADMIN` antes del paso 5.
 4. **Instalar el script.** En el archivo: *Extensiones → Apps Script*.
-   - Reemplace el contenido de `Código.gs` por el de [`apps-script/Codigo.gs`](apps-script/Codigo.gs).
-   - En ⚙ *Configuración del proyecto*, marque "Mostrar el archivo de manifiesto appsscript.json" y pegue el contenido de [`apps-script/appsscript.json`](apps-script/appsscript.json).
+   - En la app, clic en **Copiar Codigo.gs** y pegue el texto reemplazando todo el contenido de `Código.gs`.
+   - En ⚙ *Configuración del proyecto*, marque "Mostrar el archivo de manifiesto appsscript.json". En la app, clic en **Copiar appsscript.json** y péguelo en ese archivo.
    - Guarde y recargue la hoja de cálculo. Aparece el menú **CASA**.
-   - (Opcional) Con [clasp](https://github.com/google/clasp): `clasp clone <scriptId>`, copie estos dos archivos y ejecute `clasp push`.
+   - (Opcional) Con [clasp](https://github.com/google/clasp): guarde los dos archivos con *Guardar Codigo.gs…* y *Guardar appsscript.json…* en la carpeta de `clasp clone <scriptId>` y ejecute `clasp push`.
 5. **CASA → 1. Configurar libro.** Autorice los permisos que pide Google. Esto escribe la fórmula del Consolidado, crea las protecciones e instala los disparadores. Revise el resumen: avisa de roles inválidos, programas inexistentes y correos externos.
 6. **CASA → 2. Compartir con los correos de Usuarios.** Da acceso de edición a todos los de la hoja. Las protecciones ya están puestas, así que cada quien solo podrá modificar lo suyo.
 7. **Restringir quién comparte.** Botón *Compartir* → ⚙ → desmarque "Los editores pueden cambiar los permisos y compartir".

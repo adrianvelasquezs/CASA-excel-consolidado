@@ -1,12 +1,30 @@
 [project]
-name = "cronograma-consolidado"
-version = "0.1.0"
-description = "Genera el Excel consolidado del Cronograma 2027 Bloque Neón con permisos por programa, profesor y CASA"
-requires-python = ">=3.9"
+name = "cronograma-neon"
+dynamic = ["version"]
+description = "Genera el Cronograma 2027 Bloque Neón consolidado (Excel para OneDrive y plantilla para Google Sheets) con permisos por programa, profesor y CASA"
+readme = "README.md"
+requires-python = ">=3.10"
 dependencies = [
     "openpyxl>=3.1",
     "XlsxWriter>=3.1",
 ]
 
-[tool.uv]
-package = false
+[project.scripts]
+cronograma-neon = "cronograma_neon.__main__:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+build = ["pyinstaller>=6.10"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/cronograma_neon/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cronograma_neon"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
