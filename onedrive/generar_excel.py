@@ -20,7 +20,7 @@ Modelo de permisos (protección de hoja + rangos con contraseña):
   - Estructura del libro bloqueada (no se pueden borrar/renombrar hojas).
 
 Uso (desde la raíz del proyecto):
-  uv run onedrive/generar_excel.py [--filas 150]
+  uv run onedrive/generar_excel.py [--filas N]   (por defecto: config/ajustes.json)
 """
 
 import argparse
@@ -48,6 +48,7 @@ from plantillas import (  # noqa: E402
     escribir_base_programa,
     escribir_encabezados_consolidado,
     escribir_lineas,
+    leer_ajustes,
     leer_plantillas,
     referencia_hoja,
     unificar_columnas,
@@ -56,6 +57,7 @@ from plantillas import (  # noqa: E402
 CONFIG_DIR = AQUI / "config"
 PRIVADO_DIR = AQUI / "privado"
 SALIDA_DIR = AQUI / "salida"
+ARCHIVO_AJUSTES = CONFIG_DIR / "ajustes.json"
 
 ARCHIVO_SALIDA = SALIDA_DIR / "Cronograma 2027 Bloque Neón - Consolidado.xlsx"
 ARCHIVO_PROFESORES = CONFIG_DIR / "profesores.csv"
@@ -103,20 +105,28 @@ def generar_contrasena():
     return "".join(secrets.choice(alfabeto) for _ in range(10))
 
 
-def cargar_contrasenas(claves):
-    """Reutiliza privado/contrasenas.csv y genera las que falten. claves: [(rol, ambito)]."""
-    existentes = {}
-    if ARCHIVO_CONTRASENAS.exists():
-        with open(ARCHIVO_CONTRASENAS, newline="", encoding="utf-8-sig") as f:
-            for fila in csv.DictReader(f):
-                existentes[(fila["rol"], fila["ambito"])] = fila["contrasena"]
-    resultado = {clave: existentes.get(clave) or generar_contrasena() for clave in claves}
+def leer_contrasenas():
+    """{(rol, ambito): contrasena} desde privado/contrasenas.csv (vacío si no existe)."""
+    if not ARCHIVO_CONTRASENAS.exists():
+        return {}
+    with open(ARCHIVO_CONTRASENAS, newline="", encoding="utf-8-sig") as f:
+        return {(fila["rol"], fila["ambito"]): fila["contrasena"] for fila in csv.DictReader(f)}
+
+
+def guardar_contrasenas(contrasenas):
     PRIVADO_DIR.mkdir(exist_ok=True)
     with open(ARCHIVO_CONTRASENAS, "w", newline="", encoding="utf-8-sig") as f:
         escritor = csv.writer(f)
         escritor.writerow(["rol", "ambito", "contrasena"])
-        for (rol, ambito), contrasena in resultado.items():
+        for (rol, ambito), contrasena in contrasenas.items():
             escritor.writerow([rol, ambito, contrasena])
+
+
+def cargar_contrasenas(claves):
+    """Reutiliza privado/contrasenas.csv y genera las que falten. claves: [(rol, ambito)]."""
+    existentes = leer_contrasenas()
+    resultado = {clave: existentes.get(clave) or generar_contrasena() for clave in claves}
+    guardar_contrasenas(resultado)
     return resultado
 
 
@@ -264,7 +274,9 @@ def proteger_estructura(ruta, contrasena, codificar):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--filas", type=int, default=150, help="filas de registro por programa (default 150)")
+    filas_def = int(leer_ajustes(ARCHIVO_AJUSTES)["filas"])
+    parser.add_argument("--filas", type=int, default=filas_def,
+                        help=f"filas de registro por programa (por defecto {filas_def}, de config/ajustes.json)")
     args = parser.parse_args()
 
     plantillas, anchos = leer_plantillas()

@@ -4,6 +4,7 @@ hojas de programa. Lo usan onedrive/generar_excel.py y
 google-sheets/generar_plantilla.py.
 """
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -42,6 +43,24 @@ COLUMNAS_CONTEO = {
 # Columnas que identifican un curso: si alguna tiene datos, la fila cuenta como
 # registrada (columna Programa y hoja Consolidado).
 COLUMNAS_CLAVE = ("Código de curso", "CRN", "Curso")
+
+
+AJUSTES_POR_DEFECTO = {"filas": 150}
+
+
+def leer_ajustes(ruta):
+    """Lee config/ajustes.json de una plataforma; si no existe o está dañado usa los valores por defecto."""
+    ajustes = dict(AJUSTES_POR_DEFECTO)
+    try:
+        ajustes.update(json.loads(Path(ruta).read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        pass
+    return ajustes
+
+
+def guardar_ajustes(ruta, ajustes):
+    Path(ruta).parent.mkdir(parents=True, exist_ok=True)
+    Path(ruta).write_text(json.dumps(ajustes, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def normalizar(texto):

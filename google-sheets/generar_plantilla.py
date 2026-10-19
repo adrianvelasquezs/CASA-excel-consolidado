@@ -13,7 +13,7 @@ Sheets y los permisos los aplica el Apps Script de google-sheets/apps-script/
 según los correos registrados en la hoja «Usuarios».
 
 Uso (desde la raíz del proyecto):
-  uv run google-sheets/generar_plantilla.py [--filas 150]
+  uv run google-sheets/generar_plantilla.py [--filas N]   (por defecto: config/ajustes.json)
 """
 
 import argparse
@@ -31,11 +31,14 @@ from plantillas import (  # noqa: E402
     escribir_base_programa,
     escribir_encabezados_consolidado,
     escribir_lineas,
+    leer_ajustes,
     leer_plantillas,
     unificar_columnas,
 )
 
+CONFIG_DIR = AQUI / "config"
 SALIDA_DIR = AQUI / "salida"
+ARCHIVO_AJUSTES = CONFIG_DIR / "ajustes.json"
 ARCHIVO_SALIDA = SALIDA_DIR / "Cronograma 2027 Bloque Neón - Google Sheets.xlsx"
 
 # Deben coincidir con CONFIG en google-sheets/apps-script/Codigo.gs
@@ -109,7 +112,9 @@ def escribir_instrucciones(wb, f, programas):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--filas", type=int, default=150, help="filas de registro por programa (default 150)")
+    filas_def = int(leer_ajustes(ARCHIVO_AJUSTES)["filas"])
+    parser.add_argument("--filas", type=int, default=filas_def,
+                        help=f"filas de registro por programa (por defecto {filas_def}, de config/ajustes.json)")
     args = parser.parse_args()
 
     plantillas, anchos = leer_plantillas()
