@@ -28,3 +28,6 @@ dist/
 
 # Others
 .DS_Store
+
+# Contraseñas generadas (versión Excel): nunca versionar
+privado/

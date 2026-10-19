@@ -1,23 +1,43 @@
-# Cronograma 2027 Bloque Neón — Excel consolidado
+# Cronograma 2027 Bloque Neón — consolidado
 
-Un solo libro de Excel donde cada programa registra sus cursos y el equipo CASA completa su parte, con permisos de edición separados.
+Un solo libro donde cada programa registra sus cursos y el equipo CASA completa su parte, con permisos de edición separados. Hay dos versiones con la misma estructura:
+
+| | **Excel en OneDrive** (esta guía) | **Google Sheets** ([google-sheets/README.md](google-sheets/README.md)) |
+|---|---|---|
+| Cómo se identifica a cada persona | Contraseña por rango | Cuenta institucional @uniandes.edu.co |
+| Títulos y columnas de sistema bloqueados | ✅ | ✅ |
+| Cada programa solo edita su hoja | ✅ (contraseña del programa) | ✅ (por correo) |
+| Profesores solo azul, CASA solo verde | ✅ | ✅ |
+| Lo que crea un profesor no lo edita otro | ⚠️ Aproximado: filas reservadas por adelantado, contraseña por profesor | ✅ La fila queda a nombre de quien la crea, automáticamente |
+| Si alguien se salta la protección | Se detecta con *Mostrar cambios* (revisión manual) | El script revierte, registra y avisa |
+| Se puede compartir la clave | Sí (es una contraseña) | No (es la cuenta de cada persona) |
 
 ## Estructura del directorio
 
 ```
-raw/                     Plantillas originales por programa (NO se modifican)
+raw/                       Plantillas originales por programa (NO se modifican)
 config/
-  profesores.csv         Filas asignadas a cada profesor (opcional, ver abajo)
-  profesores.ejemplo.csv Ejemplo de cómo llenarlo
+  profesores.csv           Excel: filas reservadas para cada profesor (opcional)
+  profesores.ejemplo.csv   Ejemplo de cómo llenarlo
 scripts/
-  generar_consolidado.py Genera el Excel consolidado a partir de raw/ y config/
+  plantillas.py            Lectura de raw/ y estructura común de las hojas
+  generar_excel.py         Genera la versión Excel / OneDrive
+  generar_google_sheets.py Genera la plantilla para Google Sheets
+google-sheets/
+  Codigo.gs, appsscript.json  Apps Script de permisos para Google Sheets
+  README.md                Guía de despliegue en Google Workspace
 salida/
-  Cronograma 2027 Bloque Neón - Consolidado.xlsx   ← el archivo que se sube a OneDrive
+  Cronograma 2027 Bloque Neón - Consolidado.xlsx    ← versión Excel (se sube a OneDrive)
+  Cronograma 2027 Bloque Neón - Google Sheets.xlsx  ← plantilla para importar a Google Sheets
 privado/
-  contrasenas.csv        Contraseñas generadas. NO subir ni compartir completo
-pyproject.toml           Dependencias del proyecto (gestionadas con uv)
-uv.lock                  Versiones exactas de las dependencias
+  contrasenas.csv          Contraseñas de la versión Excel. NO subir ni compartir completo
+pyproject.toml             Dependencias del proyecto (gestionadas con uv)
+uv.lock                    Versiones exactas de las dependencias
 ```
+
+---
+
+# Versión Excel (OneDrive / SharePoint)
 
 ## Qué contiene el Excel
 
@@ -60,8 +80,10 @@ Si un programa no tiene profesores en el CSV, toda su zona azul se edita con la 
 Requiere [uv](https://docs.astral.sh/uv/). `uv run` crea el entorno e instala las dependencias de `uv.lock` automáticamente la primera vez:
 
 ```bash
-uv run scripts/generar_consolidado.py --filas 150
+uv run scripts/generar_excel.py --filas 150
 ```
+
+(La plantilla de Google Sheets se genera con `uv run scripts/generar_google_sheets.py`.)
 
 ⚠️ Regenerar crea un archivo **vacío**. Hágalo antes de empezar a registrar datos. Una vez el archivo esté en uso en OneDrive, los cambios de permisos se hacen a mano en Excel (*Revisar → Permitir modificar rangos* / *Administrar protección*) con la contraseña `admin`.
 
@@ -87,4 +109,4 @@ uv run scripts/generar_consolidado.py --filas 150
 Si hace falta que el sistema reconozca a cada persona sin usar contraseñas:
 
 - **Microsoft 365 (sin salir de OneDrive):** un archivo por programa, cada uno en una carpeta de SharePoint con permisos solo para ese programa y CASA, y un libro maestro de solo lectura que los une con Power Query. Así cada programa queda aislado por su cuenta institucional. Para filas por profesor, la herramienta indicada es **Microsoft Lists** con el permiso de lista "Crear elementos y editar solo los elementos creados por el usuario".
-- **Google Sheets:** los rangos protegidos se asignan por correo, y un Apps Script puede bloquear cada fila para quien la creó. Es la opción que cumple todos los requisitos con identidad real, pero implica salir de OneDrive.
+- **Google Sheets:** ya está implementada en [google-sheets/](google-sheets/README.md). Los permisos van por correo y un Apps Script bloquea cada fila para quien la creó.

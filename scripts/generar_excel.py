@@ -1,6 +1,6 @@
 """
-Genera el Excel consolidado del Cronograma 2027 Bloque Neón a partir de las
-plantillas de raw/ (que nunca se modifican).
+Genera el Excel consolidado (OneDrive / SharePoint) del Cronograma 2027 Bloque
+Neón a partir de las plantillas de raw/ (que nunca se modifican).
 
 Resultado:
   salida/Cronograma 2027 Bloque Neón - Consolidado.xlsx
@@ -16,7 +16,7 @@ Modelo de permisos (protección de hoja + rangos con contraseña):
   - Estructura del libro bloqueada (no se pueden borrar/renombrar hojas).
 
 Uso:
-  uv run scripts/generar_consolidado.py [--filas 150]
+  uv run scripts/generar_excel.py [--filas 150]
 """
 
 import argparse
@@ -30,94 +30,36 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-import openpyxl
 import xlsxwriter
 from xlsxwriter.utility import xl_col_to_name, xl_rowcol_to_cell
 
-ROOT = Path(__file__).resolve().parent.parent
-RAW_DIR = ROOT / "raw"
-CONFIG_DIR = ROOT / "config"
-PRIVADO_DIR = ROOT / "privado"
-SALIDA_DIR = ROOT / "salida"
+from plantillas import (
+    COLUMNAS_CLAVE,
+    CONFIG_DIR,
+    PRIMERA_FILA_DATOS,
+    PRIVADO_DIR,
+    ROOT,
+    SALIDA_DIR,
+    crear_formatos,
+    escribir_base_programa,
+    escribir_encabezados_consolidado,
+    escribir_lineas,
+    leer_plantillas,
+    referencia_hoja,
+    unificar_columnas,
+)
 
 ARCHIVO_SALIDA = SALIDA_DIR / "Cronograma 2027 Bloque Neón - Consolidado.xlsx"
 ARCHIVO_PROFESORES = CONFIG_DIR / "profesores.csv"
 ARCHIVO_CONTRASENAS = PRIVADO_DIR / "contrasenas.csv"
 
-FILA_ENCABEZADO = 2  # índice 0 -> fila 3 de Excel, igual que en las plantillas
-PRIMERA_FILA_DATOS = 3  # índice 0 -> fila 4 de Excel
-
-AZUL_RAW = "FF00B0F0"
-AZUL = "#00B0F0"
-VERDE = "#C6E0B4"
-AZUL_CLARO = "#E6F7FD"
-VERDE_CLARO = "#F0F7EB"
-GRIS = "#F2F2F2"
-
-# Columnas que se llenan con fecha, listas cerradas o conteos.
-COLUMNAS_FECHA = {"Fecha exacta inicio", "Fecha exacta de finalización"}
-COLUMNAS_SI_NO = {
-    "Montaje rúbricas Bloque Neón (SI / NO)": ["SI", "NO"],
-    "Variabilidad en las notas? Responder Sí o No": ["Sí", "No"],
+OPCIONES_PROTECCION = {
+    "select_locked_cells": True,
+    "select_unlocked_cells": True,
+    "autofilter": True,
+    "format_columns": True,
+    "format_rows": True,
 }
-COLUMNAS_CONTEO = {
-    "Número de competencias evaluadas",
-    "Número de estudiantes inscritos curso",
-    "Número de actividades evaluadas",
-    "Número de estudiantes evaluados",
-    "Número de criterios evaluados",
-    "Número de objetivos evaluados",
-}
-# Columnas que identifican un curso: si alguna tiene datos, la fila cuenta como
-# registrada (columna Programa y hoja Consolidado).
-COLUMNAS_CLAVE = ("Código de curso", "CRN", "Curso")
-
-
-def normalizar(texto):
-    return re.sub(r"\s+", " ", str(texto)).strip()
-
-
-def leer_plantillas():
-    """Devuelve {programa: [(encabezado, es_azul), ...]} y el ancho de cada columna."""
-    plantillas = {}
-    anchos = {}
-    for archivo in sorted(RAW_DIR.glob("*.xlsx")):
-        if archivo.name.startswith("~$"):
-            continue
-        programa = archivo.name.split(" ")[0]
-        ws = openpyxl.load_workbook(archivo, read_only=False).worksheets[0]
-        columnas = []
-        for celda in ws[FILA_ENCABEZADO + 1]:
-            if celda.value is None:
-                continue
-            color = celda.fill.fgColor
-            es_azul = bool(celda.fill.fill_type) and color.type == "rgb" and color.rgb == AZUL_RAW
-            columnas.append((normalizar(celda.value), es_azul))
-            ancho = ws.column_dimensions[celda.column_letter].width
-            if ancho and normalizar(celda.value) not in anchos:
-                anchos[normalizar(celda.value)] = ancho
-        plantillas[programa] = columnas
-    if not plantillas:
-        sys.exit(f"No se encontraron plantillas .xlsx en {RAW_DIR}")
-    return plantillas, anchos
-
-
-def unificar_columnas(plantillas):
-    """Une los encabezados de todas las plantillas conservando el orden original."""
-    unificadas = []
-    for columnas in plantillas.values():
-        for i, (nombre, es_azul) in enumerate(columnas):
-            existentes = [c[0] for c in unificadas]
-            if nombre in existentes:
-                previo = next(c for c in unificadas if c[0] == nombre)
-                if previo[1] != es_azul:
-                    sys.exit(f"La columna '{nombre}' tiene colores distintos entre plantillas")
-                continue
-            # Insertar después de la columna que la precede en esta plantilla.
-            anterior = columnas[i - 1][0] if i > 0 else None
-            pos = existentes.index(anterior) + 1 if anterior in existentes else len(unificadas)
-            unificadas.insert(pos, (nombre, es_azul))
-    return unificadas
 
 
 def leer_profesores(programas, filas):
@@ -189,94 +131,14 @@ def nombre_rango(texto):
     return re.sub(r"[^A-Za-z0-9_]", "_", texto)[:200]
 
 
-def referencia_hoja(hoja):
-    return "'" + hoja.replace("'", "''") + "'"
-
-
-def crear_formatos(wb):
-    base = {"border": 1, "border_color": "#BFBFBF", "valign": "top", "text_wrap": True}
-    return {
-        "titulo": wb.add_format({"bold": True, "font_size": 14}),
-        "nota": wb.add_format({"italic": True, "font_color": "#595959"}),
-        "leyenda_azul": wb.add_format({"bg_color": AZUL, "border": 1}),
-        "leyenda_verde": wb.add_format({"bg_color": VERDE, "border": 1}),
-        "enc_azul": wb.add_format({**base, "bold": True, "bg_color": AZUL, "align": "center", "valign": "vcenter"}),
-        "enc_verde": wb.add_format({**base, "bold": True, "bg_color": VERDE, "align": "center", "valign": "vcenter"}),
-        "dato_azul": wb.add_format({**base, "bg_color": AZUL_CLARO, "locked": False}),
-        "dato_verde": wb.add_format({**base, "bg_color": VERDE_CLARO, "locked": False}),
-        "fecha_azul": wb.add_format({**base, "bg_color": AZUL_CLARO, "locked": False, "num_format": "dd/mm/yyyy"}),
-        "fecha_verde": wb.add_format({**base, "bg_color": VERDE_CLARO, "locked": False, "num_format": "dd/mm/yyyy"}),
-        "bloqueado": wb.add_format({**base, "bg_color": GRIS, "locked": True}),
-        "profesor_fijo": wb.add_format({**base, "bg_color": GRIS, "locked": True, "bold": True}),
-        "fecha": wb.add_format({"num_format": "dd/mm/yyyy"}),
-        "h1": wb.add_format({"bold": True, "font_size": 16}),
-        "h2": wb.add_format({"bold": True, "font_size": 12, "top": 1}),
-        "texto": wb.add_format({"text_wrap": True, "valign": "top"}),
-    }
-
-
-OPCIONES_PROTECCION = {
-    "select_locked_cells": True,
-    "select_unlocked_cells": True,
-    "autofilter": True,
-    "format_columns": True,
-    "format_rows": True,
-}
-
-
 def escribir_hoja_programa(wb, f, programa, columnas, anchos, filas, asignaciones, claves):
-    ws = wb.add_worksheet(programa)
+    ws, idx = escribir_base_programa(
+        wb, f, programa, columnas, anchos, filas,
+        "Gris = bloqueado. Al editar una celda de color, Excel pedirá la contraseña de su rol.",
+    )
     ultima = PRIMERA_FILA_DATOS + filas - 1
-    ws.write(0, 0, "Azul", f["leyenda_azul"])
-    ws.write(0, 1, f"Programa / Profesores ({programa})")
-    ws.write(1, 0, "Verde", f["leyenda_verde"])
-    ws.write(1, 1, "Equipo CASA")
-    ws.write(0, 4, f"Programa: {programa}", f["titulo"])
-    ws.write(1, 4, "Gris = bloqueado. Al editar una celda de color, Excel pedirá la contraseña de su rol.", f["nota"])
-    ws.set_row(0, 21.75)
-    ws.set_row(1, 20.25)
-    ws.set_row(FILA_ENCABEZADO, 45)
-
-    idx = {nombre: i for i, (nombre, _) in enumerate(columnas)}
     col_programa = idx["Programa"]
     col_profesor = idx.get("Profesor")
-    letras_clave = [xl_col_to_name(idx[c]) for c in COLUMNAS_CLAVE if c in idx]
-
-    for c, (nombre, es_azul) in enumerate(columnas):
-        ws.write(FILA_ENCABEZADO, c, nombre, f["enc_azul" if es_azul else "enc_verde"])
-        ws.set_column(c, c, max(anchos.get(nombre, 20), 14))
-        if c == col_programa:
-            continue
-        if nombre in COLUMNAS_FECHA:
-            formato = f["fecha_azul" if es_azul else "fecha_verde"]
-        else:
-            formato = f["dato_azul" if es_azul else "dato_verde"]
-        for r in range(PRIMERA_FILA_DATOS, ultima + 1):
-            ws.write_blank(r, c, None, formato)
-
-    # Columna Programa: fórmula bloqueada que se llena sola al registrar un curso.
-    for r in range(PRIMERA_FILA_DATOS, ultima + 1):
-        cond = "&".join(f"{l}{r + 1}" for l in letras_clave)
-        ws.write_formula(r, col_programa, f'=IF({cond}="","","{programa}")', f["bloqueado"], "")
-
-    # Validaciones de datos.
-    for nombre, c in idx.items():
-        if nombre in COLUMNAS_FECHA:
-            ws.data_validation(PRIMERA_FILA_DATOS, c, ultima, c, {
-                "validate": "date", "criteria": ">=", "value": "2020-01-01",
-                "input_title": "Fecha", "input_message": "Formato dd/mm/aaaa",
-                "error_message": "Ingrese una fecha válida (dd/mm/aaaa).",
-            })
-        elif nombre in COLUMNAS_SI_NO:
-            ws.data_validation(PRIMERA_FILA_DATOS, c, ultima, c, {
-                "validate": "list", "source": COLUMNAS_SI_NO[nombre],
-            })
-        elif nombre in COLUMNAS_CONTEO:
-            ws.data_validation(PRIMERA_FILA_DATOS, c, ultima, c, {
-                "validate": "integer", "criteria": ">=", "value": 0,
-                "error_message": "Ingrese un número entero mayor o igual a 0.",
-            })
-
     azules = [i for i, (_, es_azul) in enumerate(columnas) if es_azul and i != col_programa]
     verdes = [i for i, (_, es_azul) in enumerate(columnas) if not es_azul]
 
@@ -313,27 +175,17 @@ def escribir_hoja_programa(wb, f, programa, columnas, anchos, filas, asignacione
         nombre_rango(f"CASA_{programa}"),
         claves[("casa", "Todas las hojas")],
     )
-
-    ws.autofilter(FILA_ENCABEZADO, 0, ultima, len(columnas) - 1)
-    ws.freeze_panes(PRIMERA_FILA_DATOS, idx.get("Profesor", 4) + 1)
     ws.protect(claves[("admin", "Libro completo")], OPCIONES_PROTECCION)
     return ws
 
 
 def escribir_consolidado(wb, f, programas, columnas, anchos, filas, clave_admin):
-    ws = wb.add_worksheet("Consolidado")
+    ws = escribir_encabezados_consolidado(wb, f, columnas, anchos)
+    ws.write(1, 0, "Se actualiza automáticamente con lo registrado en cada hoja de programa. "
+                   "Para filtrar u ordenar, copie y pegue como valores en otro libro.", f["nota"])
     ultima = PRIMERA_FILA_DATOS + filas  # fila Excel (1-based) de la última fila de datos
     ultima_col = xl_col_to_name(len(columnas) - 1)
     idx = {nombre: i for i, (nombre, _) in enumerate(columnas)}
-
-    ws.write(0, 0, "Consolidado de todos los programas (solo lectura)", f["titulo"])
-    ws.write(1, 0, "Se actualiza automáticamente con lo registrado en cada hoja de programa. "
-                   "Para filtrar u ordenar, copie y pegue como valores en otro libro.", f["nota"])
-    ws.set_row(FILA_ENCABEZADO, 45)
-    for c, (nombre, es_azul) in enumerate(columnas):
-        ws.write(FILA_ENCABEZADO, c, nombre, f["enc_azul" if es_azul else "enc_verde"])
-        ancho = max(anchos.get(nombre, 20), 14)
-        ws.set_column(c, c, ancho, f["fecha"] if nombre in COLUMNAS_FECHA else None)
 
     datos, condiciones = [], []
     for p in programas:
@@ -349,14 +201,12 @@ def escribir_consolidado(wb, f, programas, columnas, anchos, filas, clave_admin)
     if len(formula) > 8000:
         sys.exit("La fórmula del consolidado supera el límite de Excel; reduzca --filas")
     ws.write_dynamic_array_formula(PRIMERA_FILA_DATOS, 0, PRIMERA_FILA_DATOS, 0, formula)
-    ws.freeze_panes(PRIMERA_FILA_DATOS, idx.get("Profesor", 4) + 1)
     ws.protect(clave_admin, {"select_locked_cells": True, "format_columns": True})
     return ws
 
 
 def escribir_instrucciones(wb, f, programas, asignaciones, clave_admin):
     ws = wb.add_worksheet("Instrucciones")
-    ws.set_column(0, 0, 110)
     lineas = [
         ("h1", "Cronograma 2027 Bloque Neón — Consolidado"),
         ("texto", "Este libro reúne en un solo archivo las plantillas de todos los programas. "
@@ -383,8 +233,7 @@ def escribir_instrucciones(wb, f, programas, asignaciones, clave_admin):
         for p, lista in con_profesores.items():
             detalle = "; ".join(f"{prof}: filas {ini + 1}–{fin + 1}" for prof, ini, fin in lista)
             lineas.append(("texto", f"{p} → {detalle}"))
-    for r, (estilo, texto) in enumerate(lineas):
-        ws.write(r, 0, texto, f[estilo])
+    escribir_lineas(ws, f, lineas)
     ws.protect(clave_admin, {"select_locked_cells": True})
     return ws
 
@@ -413,10 +262,6 @@ def main():
     plantillas, anchos = leer_plantillas()
     programas = list(plantillas)
     columnas = unificar_columnas(plantillas)
-    for programa, cols in plantillas.items():
-        faltan = [c for c, _ in columnas if c not in {n for n, _ in cols}]
-        if faltan:
-            print(f"Aviso: {programa} no tenía {faltan}; se agregan para unificar.")
 
     asignaciones = leer_profesores(programas, args.filas)
     claves_necesarias = [("admin", "Libro completo"), ("casa", "Todas las hojas")]
