@@ -1,11 +1,9 @@
 /**
  * Cronograma 2027 Bloque Neón — permisos por rol y propiedad de filas en Google Sheets.
  *
- * Roles (hoja «Usuarios»):
- *   ADMIN     todo el libro; administra permisos.
- *   CASA      columnas verdes de todas las hojas de programa.
- *   GESTOR    columnas azules de su(s) programa(s), incluidas las filas de sus profesores.
- *   PROFESOR  columnas azules de su(s) programa(s); cada fila que registra queda solo para quien la registró.
+ * Roles (hoja «Usuarios»): ADMIN (todo el libro), CASA, GESTOR y PROFESOR (estos dos, de su(s) programa(s)).
+ * Qué rol edita cada columna lo define la hoja «Permisos» (columnas Profesores / Gestores / CASA con SI o NO).
+ * Cada fila que registra un profesor queda solo para quien la registró (y los gestores, si así se configura).
  *
  * Cómo se aplica:
  *   1. Protecciones nativas de Google Sheets por correo (bloquean la edición en la interfaz).
@@ -16,7 +14,7 @@
  *   3. Disparador diario «restaurarPermisos»: vuelve a dejar todas las protecciones como deben estar.
  *
  * Instalar como script vinculado a la hoja (Extensiones → Apps Script) con una cuenta
- * @uniandes.edu.co, idealmente la cuenta dueña del archivo. Ver google-sheets/README.md.
+ * @uniandes.edu.co, idealmente la cuenta dueña del archivo. Ver la guía de despliegue de la app.
  */
 
 const CONFIG = {
@@ -25,13 +23,12 @@ const CONFIG = {
   HOJA_CONSOLIDADO: 'Consolidado',
   HOJA_INSTRUCCIONES: 'Instrucciones',
   HOJA_AUDITORIA: '_Auditoria',
+  HOJA_PERMISOS: 'Permisos',
   FILA_ENCABEZADO: 3,
   PRIMERA_FILA: 4,
-  COLOR_AZUL: '#00b0f0',
   COL_PROGRAMA: 'Programa',
   COL_REGISTRADO: 'Registrado por',
   COL_FECHA: 'Fecha de registro',
-  COLUMNAS_CLAVE: ['Código de curso', 'CRN', 'Curso'],
   PREFIJO: '[CASA] ',
   GESTOR_EDITA_FILAS_DE_PROFESORES: true,
   ALERTAS_POR_CORREO: true,
@@ -40,7 +37,9 @@ const CONFIG = {
 };
 
 const ROLES = ['ADMIN', 'CASA', 'GESTOR', 'PROFESOR'];
-const HOJAS_ESPECIALES = [CONFIG.HOJA_USUARIOS, CONFIG.HOJA_CONSOLIDADO, CONFIG.HOJA_INSTRUCCIONES, CONFIG.HOJA_AUDITORIA];
+const HOJAS_ESPECIALES = [CONFIG.HOJA_USUARIOS, CONFIG.HOJA_CONSOLIDADO, CONFIG.HOJA_INSTRUCCIONES, CONFIG.HOJA_PERMISOS,
+  CONFIG.HOJA_AUDITORIA];
+const SIN_EDITORES = '---'; // columna que solo edita ADMIN
 const INICIO = Date.now();
 
 // ---------------------------------------------------------------------------
@@ -174,15 +173,15 @@ function procesarEdicion_(e) {
   const esAdmin = u.admins.has(correo);
 
   if (!esHojaPrograma_(hoja)) {
-    if (esAdmin && nombre === CONFIG.HOJA_USUARIOS) {
-      ss.toast('Cuando termine de editar «Usuarios», use CASA → Aplicar permisos ahora.', 'CASA', 8);
+    if (esAdmin && (nombre === CONFIG.HOJA_USUARIOS || nombre === CONFIG.HOJA_PERMISOS)) {
+      ss.toast(`Cuando termine de editar «${nombre}», use CASA → Aplicar permisos ahora.`, 'CASA', 8);
     } else if (!esAdmin && HOJAS_ESPECIALES.includes(nombre)) {
       incidente_(e, u, correo, null, 'Edición en hoja restringida');
     }
     return;
   }
 
-  const cols = columnas_(hoja);
+  const cols = columnas_(hoja, leerPermisos_(ss));
   const r1 = e.range.getRow();
   const r2 = e.range.getLastRow();
   const tipos = new Set();
@@ -197,8 +196,8 @@ function procesarEdicion_(e) {
       return;
     }
   }
-  if (r2 >= CONFIG.PRIMERA_FILA && tipos.has('azul')) {
-    reclamarOLiberarFilas_(hoja, cols, Math.max(r1, CONFIG.PRIMERA_FILA), r2, correo, esAdmin, u);
+  if (r2 >= CONFIG.PRIMERA_FILA && [...tipos].some(esDelPrograma_)) {
+    reclamarOLiberarFilas_(hoja, cols, Math.max(r1, CONFIG.PRIMERA_FILA), r2, correo, u);
   }
 }
 
@@ -208,37 +207,40 @@ function motivoRechazo_(u, correo, hoja, cols, r1, r2, tipos) {
   if (!correo) return 'Usuario no identificado (cuenta fuera de @' + CONFIG.DOMINIO + ')';
   if (r1 < CONFIG.PRIMERA_FILA) return 'Edición de títulos o encabezados';
   if (tipos.has('sistema') || tipos.has('fuera')) return 'Edición de columnas del sistema o fuera del área de registro';
-  if (tipos.has('verde') && !roles.casa) return 'Columna CASA sin rol CASA';
-  if (tipos.has('azul')) {
-    if (!roles.gestor && !roles.profesor) return 'Columna de programa sin rol en ' + hoja.getName();
-    if (!(roles.gestor && CONFIG.GESTOR_EDITA_FILAS_DE_PROFESORES)) {
-      const duenos = hoja.getRange(r1, cols.indice[CONFIG.COL_REGISTRADO], r2 - r1 + 1, 1).getValues();
-      const ajena = duenos.some(d => {
-        const dueno = String(d[0]).trim().toLowerCase();
-        return dueno && dueno !== correo;
-      });
-      if (ajena) return 'Fila registrada por otra persona';
-    }
+  for (const tipo of tipos) {
+    if (!rolPuedeEditar_(tipo, roles)) return 'Columna que su rol no puede editar en ' + hoja.getName();
+  }
+  // Filas registradas por otra persona: solo CASA (en sus columnas) y los gestores (si así se configura).
+  const exento = roles.casa || (roles.gestor && CONFIG.GESTOR_EDITA_FILAS_DE_PROFESORES);
+  if (!exento && [...tipos].some(esDelPrograma_)) {
+    const duenos = hoja.getRange(r1, cols.indice[CONFIG.COL_REGISTRADO], r2 - r1 + 1, 1).getValues();
+    const ajena = duenos.some(d => {
+      const dueno = String(d[0]).trim().toLowerCase();
+      return dueno && dueno !== correo;
+    });
+    if (ajena) return 'Fila registrada por otra persona';
   }
   return null;
 }
 
 /**
- * Fila libre con datos azules → queda a nombre de quien la editó y se protege.
- * Fila registrada sin datos azules → se libera.
+ * Fila libre con datos en columnas del programa, escritos por un profesor o gestor → queda a su nombre y se protege.
+ * Fila registrada sin datos en columnas del programa → se libera.
  */
-function reclamarOLiberarFilas_(hoja, cols, r1, r2, correo, esAdmin, u) {
+function reclamarOLiberarFilas_(hoja, cols, r1, r2, correo, u) {
+  const roles = rolesDe_(u, correo, hoja.getName());
+  const puedeReclamar = !!correo && !roles.admin && (roles.profesor || roles.gestor);
   const n = r2 - r1 + 1;
   const valores = hoja.getRange(r1, 1, n, cols.ancho).getValues();
   const colReg = cols.indice[CONFIG.COL_REGISTRADO];
   const colFecha = cols.indice[CONFIG.COL_FECHA];
-  const azules = cols.tipos.map((t, i) => (t === 'azul' ? i : -1)).filter(i => i >= 0);
+  const delPrograma = cols.tipos.map((t, i) => (esDelPrograma_(t) ? i : -1)).filter(i => i >= 0);
 
   valores.forEach((fila, i) => {
     const r = r1 + i;
     const dueno = String(fila[colReg - 1]).trim().toLowerCase();
-    const tieneDatos = azules.some(c => fila[c] !== '' && fila[c] !== null);
-    if (!dueno && tieneDatos && !esAdmin && correo) {
+    const tieneDatos = delPrograma.some(c => fila[c] !== '' && fila[c] !== null);
+    if (!dueno && tieneDatos && puedeReclamar) {
       hoja.getRange(r, colReg).setValue(correo);
       hoja.getRange(r, colFecha).setValue(new Date());
       crearProteccion_(rangoFila_(hoja, cols, r), 'fila', correo, editoresFila_(u, hoja.getName(), correo));
@@ -306,7 +308,9 @@ function sincronizarTodo_(ss, u) {
       const hoja = ss.getSheetByName(nombre);
       if (hoja) protegerHoja_(hoja, [...u.admins], [], r);
     });
-    programas.forEach(hoja => sincronizarHoja_(ss, hoja, u, r));
+    const permisos = leerPermisos_(ss);
+    permisos.errores.forEach(e => r.fallos.push(e));
+    programas.forEach(hoja => sincronizarHoja_(ss, hoja, u, r, permisos));
   } catch (err) {
     if (err.message !== 'TIEMPO') throw err;
     r.completo = false;
@@ -314,24 +318,28 @@ function sincronizarTodo_(ss, u) {
   return r;
 }
 
-function sincronizarHoja_(ss, hoja, u, r) {
+function sincronizarHoja_(ss, hoja, u, r, permisos) {
   const nombre = hoja.getName();
-  const cols = columnas_(hoja);
+  const cols = columnas_(hoja, permisos || leerPermisos_(ss));
+  cols.desconocidas.forEach(c => r.fallos.push(`«${c}» (hoja ${nombre}) no está en la hoja Permisos: solo ADMIN puede editarla`));
   const n = hoja.getMaxRows() - CONFIG.PRIMERA_FILA + 1;
   const g = u.programas[nombre] || { gestores: new Set(), profesores: new Set() };
   const admins = [...u.admins];
   const deseadas = [];
   const desprotegidos = [];
 
-  bloques_(cols.tipos, 'azul').forEach(([a, b]) => {
-    const rango = hoja.getRange(CONFIG.PRIMERA_FILA, a, n, b - a + 1);
-    desprotegidos.push(rango);
-    deseadas.push({ tipo: 'azul', detalle: nombre, rango, editores: [...admins, ...g.gestores, ...g.profesores] });
-  });
-  bloques_(cols.tipos, 'verde').forEach(([a, b]) => {
-    const rango = hoja.getRange(CONFIG.PRIMERA_FILA, a, n, b - a + 1);
-    desprotegidos.push(rango);
-    deseadas.push({ tipo: 'verde', detalle: nombre, rango, editores: [...admins, ...u.casa] });
+  // Un bloque por cada grupo contiguo de columnas con los mismos editores (según la hoja Permisos).
+  const combinaciones = [...new Set(cols.tipos.filter(t => t && t !== 'sistema' && t !== SIN_EDITORES))];
+  combinaciones.forEach(tipo => {
+    const editores = [...admins];
+    if (tipo[0] === 'P') editores.push(...g.profesores);
+    if (tipo[1] === 'G') editores.push(...g.gestores);
+    if (tipo[2] === 'C') editores.push(...u.casa);
+    bloques_(cols.tipos, tipo).forEach(([a, b]) => {
+      const rango = hoja.getRange(CONFIG.PRIMERA_FILA, a, n, b - a + 1);
+      desprotegidos.push(rango);
+      deseadas.push({ tipo: 'col' + tipo, detalle: nombre, rango, editores });
+    });
   });
   const registros = hoja.getRange(CONFIG.PRIMERA_FILA, cols.indice[CONFIG.COL_REGISTRADO], n, 1).getValues();
   registros.forEach((v, i) => {
@@ -341,7 +349,7 @@ function sincronizarHoja_(ss, hoja, u, r) {
     deseadas.push({ tipo: 'fila', detalle: dueno, rango: rangoFila_(hoja, cols, fila), editores: editoresFila_(u, nombre, dueno) });
   });
 
-  // Toda la hoja queda solo para ADMIN, salvo las zonas azul y verde, que tienen su propia protección.
+  // Toda la hoja queda solo para ADMIN, salvo los bloques de columnas editables, que tienen su propia protección.
   protegerHoja_(hoja, admins, desprotegidos, r);
 
   const existentes = {};
@@ -497,10 +505,43 @@ function rolesDe_(u, correo, programa) {
 
 function editoresFila_(u, programa, dueno) {
   const g = u.programas[programa] || { gestores: new Set(), profesores: new Set() };
-  const lista = [...u.admins, ...u.casa]; // CASA sigue bloqueada en azul por la protección de la zona azul
+  const lista = [...u.admins, ...u.casa]; // CASA sigue limitada a sus columnas por la protección de cada bloque
   if (CONFIG.GESTOR_EDITA_FILAS_DE_PROFESORES) lista.push(...g.gestores);
   if (g.profesores.has(dueno) || g.gestores.has(dueno)) lista.push(dueno);
   return lista;
+}
+
+/** tipo = «PGC» con '-' donde el rol no edita (p. ej. «PG-», «--C»). */
+function rolPuedeEditar_(tipo, roles) {
+  return (tipo[0] === 'P' && roles.profesor) || (tipo[1] === 'G' && roles.gestor) || (tipo[2] === 'C' && roles.casa);
+}
+
+function esDelPrograma_(tipo) {
+  return !!tipo && tipo !== 'sistema' && tipo !== 'fuera' && (tipo[0] === 'P' || tipo[1] === 'G');
+}
+
+/** Lee la hoja «Permisos»: {columnas: {nombre: {tipo, identifica}}, errores: []}. */
+function leerPermisos_(ss) {
+  const resultado = { columnas: {}, errores: [] };
+  const hoja = ss.getSheetByName(CONFIG.HOJA_PERMISOS);
+  if (!hoja) {
+    resultado.errores.push(`No existe la hoja «${CONFIG.HOJA_PERMISOS}»: solo ADMIN puede editar las columnas.`);
+    return resultado;
+  }
+  const ultima = hoja.getLastRow();
+  if (ultima < 2) return resultado;
+  const si = v => ['SI', 'SÍ', 'X', 'TRUE', 'VERDADERO'].includes(String(v).trim().toUpperCase());
+  hoja.getRange(2, 1, ultima - 1, 5).getValues().forEach((f, i) => {
+    const nombre = normalizar_(f[0]);
+    if (!nombre) return;
+    if (resultado.columnas[nombre]) {
+      resultado.errores.push(`Permisos, fila ${i + 2}: «${nombre}» está repetida; se usa la primera.`);
+      return;
+    }
+    const tipo = (si(f[1]) ? 'P' : '-') + (si(f[2]) ? 'G' : '-') + (si(f[3]) ? 'C' : '-');
+    resultado.columnas[nombre] = { tipo, identifica: si(f[4]) };
+  });
+  return resultado;
 }
 
 function exigirAdmin_(ss) {
@@ -529,26 +570,37 @@ function hojasPrograma_(ss) {
   return ss.getSheets().filter(esHojaPrograma_);
 }
 
-/** Lee la fila de encabezados: tipo de cada columna según su color (azul / verde) o si es del sistema. */
-function columnas_(hoja) {
+/**
+ * Lee la fila de encabezados. tipo de cada columna: 'sistema', o «PGC» según la hoja Permisos
+ * ('---' = solo ADMIN, también para columnas que no aparecen en Permisos).
+ */
+function columnas_(hoja, permisos) {
   const total = hoja.getLastColumn();
-  const rango = hoja.getRange(CONFIG.FILA_ENCABEZADO, 1, 1, total);
-  const nombres = rango.getValues()[0].map(normalizar_);
-  const fondos = rango.getBackgrounds()[0].map(c => String(c).toLowerCase());
+  const nombres = hoja.getRange(CONFIG.FILA_ENCABEZADO, 1, 1, total).getValues()[0].map(normalizar_);
   let ancho = 0;
   nombres.forEach((nombre, i) => { if (nombre) ancho = i + 1; });
   const sistema = [CONFIG.COL_PROGRAMA, CONFIG.COL_REGISTRADO, CONFIG.COL_FECHA];
+  const desconocidas = [];
+  const claves = [];
   const tipos = nombres.slice(0, ancho).map((nombre, i) => {
     if (!nombre) return null;
     if (sistema.includes(nombre)) return 'sistema';
-    return fondos[i] === CONFIG.COLOR_AZUL ? 'azul' : 'verde';
+    const permiso = permisos.columnas[nombre];
+    if (!permiso) {
+      desconocidas.push(nombre);
+      return SIN_EDITORES;
+    }
+    if (permiso.identifica) claves.push(i + 1);
+    return permiso.tipo;
   });
   const indice = {};
   nombres.slice(0, ancho).forEach((nombre, i) => { if (nombre) indice[nombre] = i + 1; });
   [CONFIG.COL_REGISTRADO, CONFIG.COL_FECHA].forEach(c => {
     if (!indice[c]) throw new Error(`La hoja «${hoja.getName()}» no tiene la columna «${c}»`);
   });
-  return { nombres, tipos, indice, ancho };
+  // Sin columnas marcadas como «Identifica el curso», cualquier columna del programa identifica la fila.
+  const identifican = claves.length ? claves : tipos.map((t, i) => (esDelPrograma_(t) ? i + 1 : 0)).filter(Boolean);
+  return { nombres, tipos, indice, ancho, identifican, desconocidas };
 }
 
 /** Bloques contiguos [colIni, colFin] (base 1) de un tipo de columna. */
@@ -576,7 +628,7 @@ function tipoProteccion_(p) {
 function restaurarFormulaPrograma_(hoja, cols, r1, r2) {
   const col = cols.indice[CONFIG.COL_PROGRAMA];
   if (!col) return;
-  const claves = CONFIG.COLUMNAS_CLAVE.map(n => cols.indice[n]).filter(Boolean).map(letraColumna_);
+  const claves = cols.identifican.map(letraColumna_);
   const ini = Math.max(r1, CONFIG.PRIMERA_FILA);
   if (r2 < ini) return;
   const formulas = [];
@@ -589,10 +641,10 @@ function restaurarFormulaPrograma_(hoja, cols, r1, r2) {
 function escribirConsolidado_(ss, programas) {
   const hoja = ss.getSheetByName(CONFIG.HOJA_CONSOLIDADO);
   if (!hoja) throw new Error(`No existe la hoja «${CONFIG.HOJA_CONSOLIDADO}»`);
-  const cols = columnas_(programas[0]);
+  const cols = columnas_(programas[0], leerPermisos_(ss));
   const fila = CONFIG.PRIMERA_FILA;
   const ultima = letraColumna_(cols.ancho);
-  const claves = CONFIG.COLUMNAS_CLAVE.map(n => cols.indice[n]).filter(Boolean).map(letraColumna_);
+  const claves = cols.identifican.map(letraColumna_);
   const ref = h => `'${h.getName().replace(/'/g, "''")}'`;
   const datos = programas.map(h => `${ref(h)}!A${fila}:${ultima}`);
   const condiciones = programas.map(h => `(${claves.map(l => `${ref(h)}!${l}${fila}:${l}`).join('&')})<>""`);

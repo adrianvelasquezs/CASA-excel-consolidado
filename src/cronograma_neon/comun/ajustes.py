@@ -1,6 +1,6 @@
 """
-Preferencias de la interfaz (filas, opciones del Apps Script, plantillas
-elegidas y última carpeta usada).
+Preferencias de la interfaz: la configuración en edición (programas, columnas
+y permisos), las opciones del Apps Script y la última carpeta usada.
 
 Se guardan en la carpeta de configuración del usuario de cada sistema
 operativo, nunca dentro del proyecto ni junto al ejecutable.
@@ -13,9 +13,9 @@ import sys
 from pathlib import Path
 
 POR_DEFECTO = {
-    "plantillas": None,  # None = usar las plantillas incluidas en la app
+    "configuracion": None,  # None = configuración predeterminada (programas, columnas y permisos)
     "ultima_carpeta": None,
-    "google": {"filas": 150, "apps_script": {}},
+    "google": {"apps_script": {}},
 }
 
 

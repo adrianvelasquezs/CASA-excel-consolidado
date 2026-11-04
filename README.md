@@ -1,44 +1,40 @@
 # Cronograma 2027 Bloque Neón — consolidado en Google Sheets
 
-Aplicación de escritorio (Windows y macOS) que une las plantillas de cada programa en una sola plantilla para Google Sheets, y entrega el Apps Script que aplica los permisos por cuenta institucional:
+Aplicación de escritorio (Windows y macOS) que genera **desde cero** el libro consolidado para Google Sheets, con una hoja por programa, y entrega el Apps Script que aplica los permisos por cuenta institucional. No necesita archivos de Excel de entrada.
 
-- Cada programa edita solo su hoja; los profesores y gestores solo las columnas **azules** y el equipo CASA solo las **verdes**.
+- El equipo CASA define en la app los **programas**, las **columnas** (nombre, tipo, ancho y orden) y **quién puede editar cada columna**: Profesores, Gestores, CASA. ADMIN siempre puede.
 - Lo que registra un profesor queda a su nombre y ningún otro profesor puede modificarlo.
-- Títulos, columnas del sistema y las hojas Consolidado, Usuarios e Instrucciones son solo para administración.
-- A todos los programas se agregan, al final y en verde (solo CASA): **¿Se entregó reporte?** (SI/NO), **Razones de porqué están pendientes reportes** y **Razones de porqué no se realizó medición**.
+- El libro trae una hoja **Permisos** de la que el Apps Script toma los permisos de cada columna. Un ADMIN puede cambiarlos con el libro en uso y aplicarlos con *CASA → Aplicar permisos ahora*.
+- La configuración predeterminada reproduce el Cronograma 2027: 12 programas y 34 columnas. Incluye, al final y solo para CASA, **¿Se entregó reporte?** (SI/NO), **Razones de porqué están pendientes reportes** y **Razones de porqué no se realizó medición**.
 
-La guía completa de despliegue está en [google-sheets.md](src/cronograma_neon/guias/google-sheets.md) y también se abre desde la app (**Ver guía de despliegue**).
+La guía completa de uso y despliegue está en [google-sheets.md](src/cronograma_neon/guias/google-sheets.md) y también se abre desde la app (**Ver guía de despliegue**).
 
 ## Descargar y usar
 
 1. En [Releases](../../releases), descargue el archivo de su sistema:
    - **Windows:** `Cronograma-Neon-<versión>-Windows.exe`. Si aparece "Windows protegió su PC": *Más información → Ejecutar de todas formas*.
    - **macOS:** `Cronograma-Neon-<versión>-macOS.zip`. Descomprímalo y mueva **Cronograma Neon.app** a Aplicaciones. Si macOS la bloquea la primera vez: *Configuración del Sistema → Privacidad y seguridad → Abrir de todas formas*.
-2. Abra la app y siga sus secciones:
-   1. **Plantillas de los programas:** archivos sueltos o una carpeta. Por defecto se usan las plantillas incluidas en la app.
-   2. **Configuración de la plantilla:** filas de registro por programa.
-   3. **Configuración del Apps Script:** dominio, hora de restauración y opciones de permisos.
-   4. **Generar y descargar:** la plantilla `.xlsx`, `Codigo.gs` y `appsscript.json`.
+2. En la app:
+   - **Columnas y permisos:** agregue, quite, edite o reordene columnas y marque quién puede editar cada una.
+   - **Programas:** agregue, quite o renombre los programas (una hoja por programa).
+   - **Opciones:** filas de registro por programa y opciones del Apps Script.
+   - **Generar plantilla para Google Sheets…** y guarde o copie `Codigo.gs` y `appsscript.json`.
 
-**No hay rutas fijas.** Cada archivo se carga o se guarda donde usted elija:
-
-| Elemento | Cargar | Guardar |
-|---|---|---|
-| Plantillas de los programas | *Elegir archivos… / Elegir carpeta…* | — |
-| Plantilla para Google Sheets | — | *Generar plantilla para Google Sheets…* |
-| `Codigo.gs` / `appsscript.json` | — | *Guardar…* o *Copiar* |
-
-La app recuerda sus preferencias (filas, opciones del Apps Script, plantillas elegidas y última carpeta) en la carpeta de configuración del usuario: `~/Library/Application Support/Cronograma Neon` en macOS, `%APPDATA%\Cronograma Neon` en Windows.
+**Compartir la configuración:** *Exportar configuración…* genera un `.json` que otra persona carga con *Importar configuración…*. La configuración en edición se guarda sola en la carpeta de preferencias del usuario: `~/Library/Application Support/Cronograma Neon` en macOS, `%APPDATA%\Cronograma Neon` en Windows. Los archivos que se generan se guardan donde usted elija.
 
 ## Línea de comandos
 
-El mismo ejecutable (o `uv run cronograma-neon` en desarrollo) acepta comandos; todas las rutas se indican explícitamente:
+El mismo ejecutable (o `uv run cronograma-neon` en desarrollo) acepta comandos:
 
 ```bash
-uv run cronograma-neon google --plantillas raw --salida "Google Sheets.xlsx" --apps-script apps-script --dominio uniandes.edu.co
+uv run cronograma-neon exportar-configuracion --salida configuracion.json
 ```
 
-`cronograma-neon verificar` hace una prueba rápida de la instalación; la usa el CI. Use `--help` para ver todas las opciones.
+```bash
+uv run cronograma-neon google --config configuracion.json --salida "Google Sheets.xlsx" --apps-script apps-script
+```
+
+El primero guarda la configuración predeterminada para editarla. El segundo genera la plantilla y el Apps Script; sin `--config`, usa la configuración predeterminada. `cronograma-neon verificar` hace una prueba rápida de la instalación y la usa el CI. Use `--help` para ver todas las opciones.
 
 ## Desarrollo
 
@@ -56,22 +52,23 @@ uv run pytest
 uv run --group build pyinstaller --noconfirm --clean empaquetado/cronograma_neon.spec
 ```
 
-El primero abre la interfaz, el segundo corre las pruebas y el tercero compila el ejecutable de su sistema en `dist/`. Las pruebas cubren el generador, la CLI, la interfaz (con los diálogos simulados) y una simulación del Apps Script que requiere Node.js; si Node no está instalado, esa prueba se omite.
+El primero abre la interfaz, el segundo corre las pruebas y el tercero compila el ejecutable de su sistema en `dist/`. Las pruebas cubren el modelo de configuración, el generador, la CLI, la interfaz (con los diálogos simulados) y una simulación del Apps Script que requiere Node.js; si Node no está instalado, esa prueba se omite.
 
 ```
-raw/                         Plantillas de ejemplo (se incluyen en la app; no se modifican)
 src/cronograma_neon/
-  comun/                     Lectura de plantillas, columnas adicionales, estructura de las hojas, preferencias
+  comun/configuracion.py     Modelo: programas, columnas, permisos y validaciones
+  comun/predeterminada.json  Configuración predeterminada (Cronograma 2027)
+  comun/estructura.py        Escritura de hojas de programa, Consolidado y Permisos
+  comun/ajustes.py           Preferencias del usuario
   google_sheets/             Generador de la plantilla + apps_script/ (Codigo.gs, appsscript.json)
   interfaz/                  Interfaz gráfica (Tkinter)
-  guias/                     Guía de despliegue (se muestra dentro de la app)
+  guias/                     Guía de uso y despliegue (se muestra dentro de la app)
   cli.py, __main__.py        Línea de comandos y punto de entrada
 tests/                       Pruebas (pytest) y simulación del Apps Script (Node)
 empaquetado/                 PyInstaller: spec y lanzador
+raw/                         Plantillas originales de 2027 (solo referencia histórica; la app ya no las usa)
 .github/workflows/           CI/CD
 ```
-
-Las columnas que se agregan a todos los programas se definen en `COLUMNAS_ADICIONALES` (`src/cronograma_neon/comun/plantillas.py`). Ahí se indica el nombre, el color (`False` = verde, CASA) y el ancho de cada una.
 
 ## CI/CD y releases
 
@@ -83,13 +80,13 @@ Las columnas que se agregan a todos los programas se definen en `COLUMNAS_ADICIO
 4. Sube los ejecutables como artefactos del workflow: el `.exe`, y el `.app` comprimido en `.zip`.
 
 **Publicar una versión:**
-1. Cambie `__version__` en `src/cronograma_neon/__init__.py` y haga commit.
-2. Cree y suba el tag con la misma versión:
+1. Cambie `__version__` en `src/cronograma_neon/__init__.py` y haga commit en `main`.
+2. Cree y suba el tag con la misma versión (por ejemplo `v3.0.0`):
    ```bash
-   git tag v2.0.0
+   git tag v3.0.0
    ```
    ```bash
-   git push origin v2.0.0
+   git push origin v3.0.0
    ```
 
 El workflow verifica que el tag coincida con la versión y crea el release con los dos ejecutables.

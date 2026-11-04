@@ -18,10 +18,9 @@ NOMBRE = "Cronograma Neon"
 datas = [
     (str(PAQUETE / "google_sheets" / "apps_script"), "cronograma_neon/google_sheets/apps_script"),
     (str(PAQUETE / "guias"), "cronograma_neon/guias"),
+    # Configuración predeterminada (programas, columnas y permisos); no se incluyen plantillas de Excel.
+    (str(PAQUETE / "comun" / "predeterminada.json"), "cronograma_neon/comun"),
 ]
-# Plantillas de ejemplo incluidas como punto de partida (el usuario puede elegir otras).
-datas += [(str(p), "cronograma_neon/plantillas_incluidas")
-          for p in sorted((RAIZ / "raw").glob("*.xlsx")) if not p.name.startswith("~$")]
 
 a = Analysis(
     [str(RAIZ / "empaquetado" / "lanzador.py")],

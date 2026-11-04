@@ -83,6 +83,7 @@ Object.entries(est).forEach(([nombre, info]) => {
     info.header.forEach(([v, color], j) => { if (v) { h.set(3, j + 1, v); h.fondos[j + 1] = color ? '#' + color.slice(2).toLowerCase() : '#ffffff'; } });
   }
   if (nombre === 'Usuarios') info.usuarios_hdr.forEach((v, j) => h.set(1, j + 1, v));
+  if (info.filas) info.filas.forEach((fila, i) => fila.forEach((v, j) => { if (v !== '') h.set(i + 1, j + 1, v); }));
   hojas.push(h);
 });
 const ss = {
@@ -153,9 +154,11 @@ usuarioActual = DUENO;
 vm.runInContext('configurarLibro()', ctx);
 const pAFIN = H('AFIN').protecciones;
 ok(pAFIN.filter(p => p.tipo === 'SHEET').length === 1, 'AFIN: 1 protección de hoja');
-ok(pAFIN.filter(p => p.desc.includes('azul|')).length === 3, 'AFIN: 3 bloques azules (B:K, M, W) → ' + pAFIN.filter(p => p.desc.includes('azul|')).map(p => p.rango.getA1Notation()).join(' '));
-ok(pAFIN.filter(p => p.desc.includes('verde|')).length === 3, 'AFIN: 3 bloques verdes → ' + pAFIN.filter(p => p.desc.includes('verde|')).map(p => p.rango.getA1Notation()).join(' '));
+ok(pAFIN.filter(p => p.desc.includes('colPG-|')).length === 3, 'AFIN: 3 bloques de programa (B:K, M, W) → ' + pAFIN.filter(p => p.desc.includes('colPG-|')).map(p => p.rango.getA1Notation()).join(' '));
+ok(pAFIN.filter(p => p.desc.includes('col--C|')).length === 3, 'AFIN: 3 bloques de CASA → ' + pAFIN.filter(p => p.desc.includes('col--C|')).map(p => p.rango.getA1Notation()).join(' '));
+ok(H('Permisos').protecciones.length === 1, 'Hoja Permisos protegida (solo ADMIN)');
 ok(H('Usuarios').protecciones.length === 1 && H('Consolidado').protecciones.length === 1, 'Usuarios y Consolidado protegidas');
+ok(editar('prof.a@uniandes.edu.co', 'Permisos', 2, 4, 'SI') === 'BLOQUEADO', 'Profesor no edita la hoja Permisos');
 const formula = H('Consolidado').formulas['4,1'] || '';
 ok(formula.startsWith('=ARRAYFORMULA(IFNA(FILTER(VSTACK(') && formula.includes(`'Pregrado-CEMS'!A4:${ULTIMA}`), 'Fórmula del Consolidado (' + formula.length + ' caracteres)');
 console.log('   ' + formula.slice(0, 160) + '…');
@@ -210,10 +213,10 @@ ok(correos.length - antes === 4 && correos[antes].to.includes('coordinadora@unia
 ok(editar('externo@gmail.com', 'MF', 9, B, 'X', { saltarProteccion: true }) && H('MF').valor(9, B) === '', 'Cuenta externa sin correo identificable: se revierte');
 
 console.log('\n6) Sincronización idempotente y restauración');
-H('AFIN').protecciones.find(p => p.desc.includes('azul|')).remove();
+H('AFIN').protecciones.find(p => p.desc.includes('colPG-|')).remove();
 const extra = H('AFIN').getRange(30, 2, 5, 3).protect().setDescription('mía');
 vm.runInContext('restaurarPermisos()', ctx);
-ok(H('AFIN').protecciones.filter(p => p.desc.includes('azul|')).length === 3, 'Protección azul borrada se restaura');
+ok(H('AFIN').protecciones.filter(p => p.desc.includes('colPG-|')).length === 3, 'Protección de programa borrada se restaura');
 ok(!H('AFIN').protecciones.includes(extra), 'Protección creada a mano se elimina');
 const n1 = hojas.reduce((s, h) => s + h.protecciones.length, 0);
 usuarioActual = DUENO;
@@ -226,6 +229,30 @@ console.log('\n7) Menú solo para ADMIN');
 usuarioActual = 'prof.a@uniandes.edu.co';
 vm.runInContext('aplicarPermisos()', ctx);
 ok(alertas[alertas.length - 1].includes('solo para ADMIN'), 'Profesor no puede ejecutar el menú');
+
+console.log('\n8) Cambiar permisos en vivo (hoja Permisos)');
+usuarioActual = DUENO;
+const PER = H('Permisos');
+const filaPermiso = nombre => { for (let r = 2; r <= PER.getLastRow(); r++) if (PER.valor(r, 1) === nombre) return r; return 0; };
+const CRN = col('AFIN', 'CRN'), COMP = col('AFIN', 'Competencia');
+ok(editar('analista.casa@uniandes.edu.co', 'AFIN', 40, D, 'x') === 'BLOQUEADO', 'Antes: CASA no edita «Curso»');
+PER.set(filaPermiso('Curso'), 4, 'SI');                        // Curso: programa y CASA
+PER.set(filaPermiso('CRN'), 2, 'NO');                          // CRN: solo gestores
+PER.set(filaPermiso('Competencia'), 1, 'Competencia (otra)');  // ya no coincide con la hoja
+vm.runInContext('aplicarPermisos()', ctx);
+const resumenPermisos = alertas[alertas.length - 1];
+ok(editar('analista.casa@uniandes.edu.co', 'AFIN', 40, D, 'Curso CASA') === 'EDITADO', 'CASA ahora edita «Curso» (columna mixta)');
+ok(H('AFIN').valor(40, REG) === '', '…sin quedarse con la fila (CASA no reclama filas)');
+ok(editar('analista.casa@uniandes.edu.co', 'AFIN', 5, D, 'y') === 'EDITADO', '…también en la fila registrada por A');
+ok(editar('prof.a@uniandes.edu.co', 'AFIN', 5, D, 'z') === 'EDITADO', 'El dueño sigue editando «Curso»');
+ok(editar('prof.b@uniandes.edu.co', 'AFIN', 5, D, 'w') === 'BLOQUEADO', 'Otro profesor sigue bloqueado en la fila de A');
+ok(editar('prof.a@uniandes.edu.co', 'AFIN', 5, CRN, '1') === 'BLOQUEADO', 'Profesor ya no edita «CRN» (solo gestores)');
+ok(editar('gestor.afin@uniandes.edu.co', 'AFIN', 5, CRN, '1') === 'EDITADO', 'Gestor edita «CRN»');
+ok(editar('prof.a@uniandes.edu.co', 'AFIN', 5, COMP, 'x') === 'BLOQUEADO' &&
+   editar('gestor.afin@uniandes.edu.co', 'AFIN', 5, COMP, 'x') === 'BLOQUEADO', 'Columna ausente en Permisos: solo ADMIN');
+ok(resumenPermisos.includes('no está en la hoja Permisos'), 'Avisa de la columna que no está en Permisos');
+ok(editar('prof.a@uniandes.edu.co', 'AFIN', 5, CRN, '9', { saltarProteccion: true }) && H('AFIN').valor(5, CRN) === '1',
+   'Si un profesor se salta la protección de «CRN», se revierte');
 
 console.log(fallos ? `\n${fallos} prueba(s) fallaron` : '\nTodas las pruebas pasaron');
 process.exit(fallos ? 1 : 0);
