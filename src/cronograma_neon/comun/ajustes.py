@@ -1,10 +1,9 @@
 """
-Preferencias de la interfaz (filas, profesores, opciones del Apps Script,
-plantillas elegidas y última carpeta usada).
+Preferencias de la interfaz (filas, opciones del Apps Script, plantillas
+elegidas y última carpeta usada).
 
 Se guardan en la carpeta de configuración del usuario de cada sistema
-operativo, nunca dentro del proyecto ni junto al ejecutable. Las contraseñas
-NO se guardan aquí: se cargan y guardan explícitamente como archivo.
+operativo, nunca dentro del proyecto ni junto al ejecutable.
 """
 
 import copy
@@ -16,7 +15,6 @@ from pathlib import Path
 POR_DEFECTO = {
     "plantillas": None,  # None = usar las plantillas incluidas en la app
     "ultima_carpeta": None,
-    "onedrive": {"filas": 150, "profesores": []},
     "google": {"filas": 150, "apps_script": {}},
 }
 

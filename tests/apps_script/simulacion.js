@@ -145,6 +145,8 @@ const U = H('Usuarios');
 
 const B = col('AFIN', 'Código de curso'), D = col('AFIN', 'Curso'), L = col('AFIN', 'Número de Competencia a evaluar');
 const REG = col('AFIN', 'Registrado por'), PROG = col('AFIN', 'Programa');
+const REPORTE = col('AFIN', '¿Se entregó reporte?'), RAZONES = col('AFIN', 'Razones de porqué no se realizó medición');
+const ULTIMA = letra(est.AFIN.header.filter(([v]) => v).length);
 
 console.log('\n1) Configurar libro (dueño)');
 usuarioActual = DUENO;
@@ -155,7 +157,7 @@ ok(pAFIN.filter(p => p.desc.includes('azul|')).length === 3, 'AFIN: 3 bloques az
 ok(pAFIN.filter(p => p.desc.includes('verde|')).length === 3, 'AFIN: 3 bloques verdes → ' + pAFIN.filter(p => p.desc.includes('verde|')).map(p => p.rango.getA1Notation()).join(' '));
 ok(H('Usuarios').protecciones.length === 1 && H('Consolidado').protecciones.length === 1, 'Usuarios y Consolidado protegidas');
 const formula = H('Consolidado').formulas['4,1'] || '';
-ok(formula.startsWith('=ARRAYFORMULA(IFNA(FILTER(VSTACK(') && formula.includes("'Pregrado-CEMS'!A4:AH"), 'Fórmula del Consolidado (' + formula.length + ' caracteres)');
+ok(formula.startsWith('=ARRAYFORMULA(IFNA(FILTER(VSTACK(') && formula.includes(`'Pregrado-CEMS'!A4:${ULTIMA}`), 'Fórmula del Consolidado (' + formula.length + ' caracteres)');
 console.log('   ' + formula.slice(0, 160) + '…');
 console.log('   alerta: ' + alertas[alertas.length - 1].replace(/\n/g, '\n           '));
 ok(alertas[alertas.length - 1].includes('externo@gmail.com') && alertas[alertas.length - 1].includes('JEFE'), 'Avisa correo externo y rol inválido');
@@ -173,12 +175,18 @@ console.log('\n3) Propiedad de filas');
 ok(editar('prof.a@uniandes.edu.co', 'AFIN', 5, B, 'AFIN-1001') === 'EDITADO', 'Profesor A registra un curso en la fila 5');
 ok(H('AFIN').valor(5, REG) === 'prof.a@uniandes.edu.co', 'Fila 5 queda a nombre de A');
 const pf = H('AFIN').protecciones.find(p => p.desc.startsWith('[CASA] fila|'));
-ok(pf && pf.rango.getA1Notation() === 'A5:AH5', 'Fila 5 protegida (A5:AH5)');
+ok(pf && pf.rango.getA1Notation() === `A5:${ULTIMA}5`, `Fila 5 protegida (A5:${ULTIMA}5)`);
 ok(editar('prof.a@uniandes.edu.co', 'AFIN', 5, D, 'Finanzas') === 'EDITADO', 'A sigue editando su fila');
 ok(editar('prof.b@uniandes.edu.co', 'AFIN', 5, D, 'Otro') === 'BLOQUEADO', 'Profesor B no edita la fila de A');
 ok(editar('gestor.afin@uniandes.edu.co', 'AFIN', 5, D, 'Finanzas I') === 'EDITADO', 'Gestor de AFIN sí edita la fila de A');
 ok(editar('analista.casa@uniandes.edu.co', 'AFIN', 5, L, 'C1') === 'EDITADO', 'CASA edita la columna verde de la fila de A');
 ok(editar('analista.casa@uniandes.edu.co', 'AFIN', 5, B, 'X') === 'BLOQUEADO', 'CASA sigue sin editar azul en la fila de A');
+ok(REPORTE && RAZONES, 'Las columnas nuevas existen en la hoja');
+ok(editar('analista.casa@uniandes.edu.co', 'AFIN', 5, REPORTE, 'SI') === 'EDITADO', 'CASA llena «¿Se entregó reporte?» en la fila de A');
+ok(editar('analista.casa@uniandes.edu.co', 'AFIN', 9, RAZONES, 'Sin estudiantes') === 'EDITADO', 'CASA llena razones de no medición');
+ok(editar('prof.a@uniandes.edu.co', 'AFIN', 5, REPORTE, 'NO') === 'BLOQUEADO', 'Profesor no edita «¿Se entregó reporte?»');
+ok(editar('gestor.afin@uniandes.edu.co', 'AFIN', 5, RAZONES, 'x') === 'BLOQUEADO', 'Gestor no edita las razones (CASA)');
+ok(editar('prof.a@uniandes.edu.co', 'AFIN', 7, REPORTE, 'NO', { saltarProteccion: true }) && H('AFIN').valor(7, REPORTE) === '', 'Si un profesor se salta la protección, se revierte');
 ok(editar('prof.b@uniandes.edu.co', 'AFIN', 6, B, 'AFIN-2002') === 'EDITADO' && H('AFIN').valor(6, REG) === 'prof.b@uniandes.edu.co', 'B registra la fila 6');
 ok(editar('prof.b@uniandes.edu.co', 'MF', 4, B, 'MF-1') === 'EDITADO', 'B (AFIN y MF) registra en MF');
 
@@ -197,7 +205,7 @@ ok((H('AFIN').formulas['8,' + PROG] || '').startsWith('=IF(B8&C8&D8'), 'Columna 
 editar('prof.a@uniandes.edu.co', 'Consolidado', 10, 3, 'X', { saltarProteccion: true });
 ok(H('Consolidado').valor(10, 3) === '' && (H('Consolidado').formulas['4,1'] || '').startsWith('=ARRAYFORMULA'), 'Consolidado: se reescribe la fórmula');
 const aud = H('_Auditoria');
-ok(aud && aud.getLastRow() === 5 && aud.oculta, 'Auditoría con 4 incidentes (y oculta)');
+ok(aud && aud.getLastRow() === 6 && aud.oculta, 'Auditoría con 5 incidentes (y oculta)');
 ok(correos.length - antes === 4 && correos[antes].to.includes('coordinadora@uniandes.edu.co'), 'Alerta por correo a los ADMIN');
 ok(editar('externo@gmail.com', 'MF', 9, B, 'X', { saltarProteccion: true }) && H('MF').valor(9, B) === '', 'Cuenta externa sin correo identificable: se revierte');
 

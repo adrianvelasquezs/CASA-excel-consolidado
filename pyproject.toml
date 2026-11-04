@@ -1,7 +1,7 @@
 [project]
 name = "cronograma-neon"
 dynamic = ["version"]
-description = "Genera el Cronograma 2027 Bloque Neón consolidado (Excel para OneDrive y plantilla para Google Sheets) con permisos por programa, profesor y CASA"
+description = "Genera el Cronograma 2027 Bloque Neón consolidado para Google Sheets, con permisos por programa, profesor y CASA"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

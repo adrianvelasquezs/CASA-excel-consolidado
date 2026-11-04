@@ -1,15 +1,27 @@
-# Versión Google Sheets
+# Cronograma consolidado en Google Sheets
 
-Mismo cronograma consolidado, pero con permisos **por cuenta institucional** en lugar de contraseñas. Es la única de las dos versiones que cumple de forma real que lo que registra un profesor no lo pueda modificar otro.
+Un solo libro de Google Sheets con una hoja por programa, permisos **por cuenta institucional** y una hoja «Consolidado» que une todo. Lo que registra un profesor queda a su nombre y ningún otro profesor puede modificarlo.
 
-Pestaña **Google Sheets** de la app. **Qué se carga y qué se guarda** (siempre donde usted elija):
+**Qué se carga y qué se guarda en la app** (siempre donde usted elija):
 
 | | Botón | Archivo |
 |---|---|---|
-| Entrada | *Elegir archivos… / Elegir carpeta…* (arriba) | Plantillas .xlsx de los programas (o las incluidas en la app) |
-| Salida | *Generar plantilla para Google Sheets…* | Plantilla que se importa a Google Sheets (sin contraseñas) |
-| Salida | *Guardar Codigo.gs… / Copiar Codigo.gs* | Apps Script que aplica los permisos, con la configuración de la sección 2 ya aplicada |
+| Entrada | *Elegir archivos… / Elegir carpeta…* (sección 1) | Plantillas .xlsx de los programas (o las incluidas en la app) |
+| Salida | *Generar plantilla para Google Sheets…* | Plantilla .xlsx que se importa a Google Sheets |
+| Salida | *Guardar Codigo.gs… / Copiar Codigo.gs* | Apps Script que aplica los permisos, con la configuración de la sección 3 ya aplicada |
 | Salida | *Guardar appsscript.json… / Copiar appsscript.json* | Manifiesto del script (zona horaria America/Bogota) |
+
+## Columnas
+
+Cada hoja de programa tiene las columnas de las plantillas, con su color. **Azul**: las llenan profesores y gestores del programa. **Verde**: las llena el equipo CASA. Además, a todos los programas se agregan al final estas columnas verdes (solo CASA):
+
+| Columna | Tipo de respuesta |
+|---|---|
+| ¿Se entregó reporte? | Lista desplegable SI / NO |
+| Razones de porqué están pendientes reportes | Texto libre |
+| Razones de porqué no se realizó medición | Texto libre |
+
+Después van dos columnas grises que llena el script: **Registrado por** y **Fecha de registro**. Si en el futuro una plantilla ya trae alguna de las columnas nuevas, se respeta su posición y no se duplica.
 
 ## Cómo funciona
 
@@ -47,7 +59,7 @@ En la columna Programa(s), varios programas van separados por coma (`AFIN, MF`).
 
 Hágalo con una cuenta **@uniandes.edu.co de CASA**, idealmente la que será dueña del archivo. Esa cuenta queda como ADMIN automático y es la que ejecuta los disparadores.
 
-1. **Generar la plantilla.** En la app, pestaña *Google Sheets*: revise el dominio y las opciones del Apps Script, clic en **Generar plantilla para Google Sheets…** y elija dónde guardarla.
+1. **Generar la plantilla.** En la app, revise el dominio y las opciones del Apps Script, clic en **Generar plantilla para Google Sheets…** y elija dónde guardarla.
 2. **Importar a Google Sheets.** En Google Drive: *Nuevo → Subir archivo* y luego *Abrir con → Hojas de cálculo de Google*. O bien en Sheets: *Archivo → Importar → Subir*, eligiendo "Reemplazar hoja de cálculo". Trabaje sobre el archivo de Google Sheets, no sobre el .xlsx.
 3. **Llenar la hoja Usuarios.** Incluya al menos a los ADMIN y al equipo CASA. Si el archivo está en una **unidad compartida** (sin dueño), agréguese usted como `ADMIN` antes del paso 5.
 4. **Instalar el script.** En el archivo: *Extensiones → Apps Script*.

@@ -1,6 +1,6 @@
 """
-Lectura de las plantillas por programa y escritura de la estructura común de
-las hojas. Lo usan las dos versiones (onedrive y google_sheets).
+Lectura de las plantillas por programa y escritura de la estructura de las
+hojas de programa y del Consolidado.
 
 Nada aquí asume rutas fijas: las plantillas llegan como una lista de archivos
 o carpetas elegidos por el usuario.
@@ -29,7 +29,15 @@ COLUMNAS_FECHA = {"Fecha exacta inicio", "Fecha exacta de finalización"}
 COLUMNAS_SI_NO = {
     "Montaje rúbricas Bloque Neón (SI / NO)": ["SI", "NO"],
     "Variabilidad en las notas? Responder Sí o No": ["Sí", "No"],
+    "¿Se entregó reporte?": ["SI", "NO"],
 }
+# Columnas que aplican a todos los programas aunque no estén en sus plantillas.
+# Se agregan al final, en verde (las llena el equipo CASA), con su ancho.
+COLUMNAS_ADICIONALES = [
+    ("¿Se entregó reporte?", False, 18),
+    ("Razones de porqué están pendientes reportes", False, 45),
+    ("Razones de porqué no se realizó medición", False, 45),
+]
 COLUMNAS_CONTEO = {
     "Número de competencias evaluadas",
     "Número de estudiantes inscritos curso",
@@ -97,7 +105,7 @@ def leer_plantillas(rutas):
     """Devuelve ({programa: [(encabezado, es_azul), ...]}, {encabezado: ancho})."""
     plantillas = {}
     origen = {}
-    anchos = {}
+    anchos = {nombre: ancho for nombre, _, ancho in COLUMNAS_ADICIONALES}
     for archivo in expandir_rutas(rutas):
         programa = programa_de(archivo)
         validar_programa(programa, archivo)
@@ -139,9 +147,14 @@ def unificar_columnas(plantillas):
             anterior = columnas[i - 1][0] if i > 0 else None
             pos = existentes.index(anterior) + 1 if anterior in existentes else len(unificadas)
             unificadas.insert(pos, (nombre, es_azul))
+    nombres = [n for n, _ in unificadas]
+    for nombre, es_azul, _ancho in COLUMNAS_ADICIONALES:
+        if nombre not in nombres:  # si una plantilla ya la trae, se respeta su posición y color
+            unificadas.append((nombre, es_azul))
     avisos = []
+    adicionales = {n for n, _, _ in COLUMNAS_ADICIONALES}
     for programa, cols in plantillas.items():
-        faltan = [c for c, _ in unificadas if c not in {n for n, _ in cols}]
+        faltan = [c for c, _ in unificadas if c not in {n for n, _ in cols} and c not in adicionales]
         if faltan:
             avisos.append(f"Aviso: {programa} no tenía {faltan}; se agregan para unificar.")
     return unificadas, avisos
@@ -174,7 +187,6 @@ def crear_formatos(wb):
         "fecha_verde": wb.add_format({**base, "bg_color": VERDE_CLARO, "locked": False, "num_format": "dd/mm/yyyy"}),
         "bloqueado": wb.add_format({**base, "bg_color": GRIS, "locked": True}),
         "bloqueado_fecha": wb.add_format({**base, "bg_color": GRIS, "locked": True, "num_format": "dd/mm/yyyy hh:mm"}),
-        "profesor_fijo": wb.add_format({**base, "bg_color": GRIS, "locked": True, "bold": True}),
         "fecha": wb.add_format({"num_format": "dd/mm/yyyy"}),
         "h1": wb.add_format({"bold": True, "font_size": 16}),
         "h2": wb.add_format({"bold": True, "font_size": 12, "top": 1}),

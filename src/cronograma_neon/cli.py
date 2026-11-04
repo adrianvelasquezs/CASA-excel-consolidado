@@ -1,10 +1,8 @@
 """
 Línea de comandos. Todas las rutas se indican explícitamente.
 
-  cronograma-neon onedrive --plantillas CARPETA_O_ARCHIVOS... --salida LIBRO.xlsx \
-                           --contrasenas CONTRASENAS.csv [--profesores PROFESORES.csv] [--filas 150]
-  cronograma-neon google   --plantillas CARPETA_O_ARCHIVOS... --salida PLANTILLA.xlsx \
-                           [--apps-script CARPETA] [--dominio uniandes.edu.co] [--filas 150]
+  cronograma-neon google --plantillas CARPETA_O_ARCHIVOS... --salida PLANTILLA.xlsx \
+                         [--apps-script CARPETA] [--dominio uniandes.edu.co] [--filas 150]
   cronograma-neon verificar [--informe INFORME.txt]
 
 Sin argumentos se abre la interfaz gráfica.
@@ -17,26 +15,8 @@ import traceback
 from pathlib import Path
 
 from . import __version__
-from .comun.plantillas import ErrorGeneracion, carpeta_plantillas_incluidas, leer_plantillas
+from .comun.plantillas import COLUMNAS_ADICIONALES, ErrorGeneracion, carpeta_plantillas_incluidas
 from .google_sheets import generador as google
-from .onedrive import generador as onedrive
-
-
-def _onedrive(args):
-    # Antes de generar, asegurar que las contraseñas se podrán guardar: un Excel sin sus claves no sirve.
-    destino_claves = Path(args.contrasenas)
-    try:
-        destino_claves.parent.mkdir(parents=True, exist_ok=True)
-        with open(destino_claves, "a", encoding="utf-8-sig"):
-            pass
-    except OSError as error:
-        raise ErrorGeneracion(f"No se puede escribir el archivo de contraseñas {destino_claves}: {error}") from error
-    existentes = onedrive.leer_contrasenas_csv(destino_claves) if destino_claves.stat().st_size else {}
-    profesores = onedrive.leer_profesores_csv(args.profesores) if args.profesores else []
-    claves, mensajes = onedrive.generar_excel(args.plantillas, args.salida, args.filas, profesores, existentes)
-    onedrive.escribir_contrasenas_csv(args.contrasenas, claves)
-    mensajes.append(f"Contraseñas guardadas en: {args.contrasenas} (no lo comparta completo)")
-    return mensajes
 
 
 def _google(args):
@@ -60,7 +40,7 @@ def _google(args):
 
 
 def verificar():
-    """Prueba de humo del ejecutable: genera las dos versiones con las plantillas incluidas en una carpeta temporal."""
+    """Prueba de humo del ejecutable: genera la plantilla con las plantillas incluidas en una carpeta temporal."""
     import openpyxl
 
     mensajes = [f"Cronograma Neón {__version__} — verificación"]
@@ -68,20 +48,20 @@ def verificar():
     if not incluidas:
         raise ErrorGeneracion("La app no trae plantillas incluidas.")
     with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
-        primer_programa = next(iter(leer_plantillas([incluidas])[0]))
-        claves, m = onedrive.generar_excel([incluidas], tmp / "onedrive.xlsx", 20, [(primer_programa, "Profesor Prueba", 3)])
-        mensajes += m
-        libro = openpyxl.load_workbook(tmp / "onedrive.xlsx")
-        if libro.sheetnames[0] != "Instrucciones" or libro.sheetnames[-1] != "Consolidado":
-            raise ErrorGeneracion(f"Hojas inesperadas en el Excel: {libro.sheetnames}")
-        mensajes += google.generar_plantilla([incluidas], tmp / "google.xlsx", 20)
-        if openpyxl.load_workbook(tmp / "google.xlsx").sheetnames[-1] != "Usuarios":
-            raise ErrorGeneracion("La plantilla de Google no tiene la hoja Usuarios.")
+        destino = Path(tmp) / "google.xlsx"
+        mensajes += google.generar_plantilla([incluidas], destino, 20)
+        libro = openpyxl.load_workbook(destino)
+        if libro.sheetnames[0] != "Instrucciones" or libro.sheetnames[-2:] != ["Consolidado", "Usuarios"]:
+            raise ErrorGeneracion(f"Hojas inesperadas en la plantilla: {libro.sheetnames}")
+        encabezados = [c.value for c in libro[libro.sheetnames[1]][3]]
+        faltan = [n for n, _, _ in COLUMNAS_ADICIONALES if n not in encabezados]
+        if faltan:
+            raise ErrorGeneracion(f"Faltan columnas en la plantilla: {faltan}")
         codigo = google.codigo_apps_script({"DOMINIO": "ejemplo.edu.co"})
         if "DOMINIO: 'ejemplo.edu.co'," not in codigo:
             raise ErrorGeneracion("No se aplicó la configuración del Apps Script.")
-        mensajes.append(f"OK: {len(libro.sheetnames) - 2} programas, {len(claves)} contraseñas, Apps Script de {len(codigo)} caracteres.")
+        mensajes.append(f"OK: {len(libro.sheetnames) - 3} programas, {len(encabezados)} columnas, "
+                        f"Apps Script de {len(codigo)} caracteres.")
     return mensajes
 
 
@@ -90,14 +70,6 @@ def construir_parser():
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="comando", required=True)
-
-    od = sub.add_parser("onedrive", help="Excel protegido con contraseñas para OneDrive/SharePoint")
-    od.add_argument("--plantillas", nargs="+", required=True, help="carpetas y/o archivos .xlsx de las plantillas")
-    od.add_argument("--salida", required=True, help="dónde guardar el Excel generado")
-    od.add_argument("--contrasenas", required=True,
-                    help="CSV de contraseñas: se reutiliza si existe y se actualiza con las nuevas")
-    od.add_argument("--profesores", help="CSV programa,profesor,filas con filas reservadas (opcional)")
-    od.add_argument("--filas", type=int, default=150, help="filas de registro por programa (por defecto 150)")
 
     gs = sub.add_parser("google", help="Plantilla para Google Sheets (+ Apps Script)")
     gs.add_argument("--plantillas", nargs="+", required=True, help="carpetas y/o archivos .xlsx de las plantillas")
@@ -122,7 +94,7 @@ def main(argv=None):
     args = construir_parser().parse_args(argv)
     informe = getattr(args, "informe", None)
     try:
-        mensajes = {"onedrive": _onedrive, "google": _google}.get(args.comando, lambda _a: verificar())(args)
+        mensajes = _google(args) if args.comando == "google" else verificar()
         codigo = 0
     except ErrorGeneracion as error:
         mensajes, codigo = [f"Error: {error}"], 1
