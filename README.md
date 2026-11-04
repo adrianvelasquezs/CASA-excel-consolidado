@@ -7,7 +7,7 @@ Aplicación de escritorio (Windows y macOS) que genera **desde cero** el libro c
 - El libro trae una hoja **Permisos** de la que el Apps Script toma los permisos de cada columna. Un ADMIN puede cambiarlos con el libro en uso y aplicarlos con *CASA → Aplicar permisos ahora*.
 - La configuración predeterminada reproduce el Cronograma 2027: 12 programas y 34 columnas. Incluye, al final y solo para CASA, **¿Se entregó reporte?** (SI/NO), **Razones de porqué están pendientes reportes** y **Razones de porqué no se realizó medición**.
 
-La guía completa de uso y despliegue está en [google-sheets.md](src/cronograma_neon/guias/google-sheets.md) y también se abre desde la app (**Ver guía de despliegue**).
+La guía completa de uso y despliegue, en texto plano, está en [guia-de-despliegue.txt](src/cronograma_neon/guias/guia-de-despliegue.txt). También se abre desde la app (**Ver guía de despliegue**) y se puede descargar con **Guardar guía (.txt)…**.
 
 ## Descargar y usar
 
@@ -62,7 +62,7 @@ src/cronograma_neon/
   comun/ajustes.py           Preferencias del usuario
   google_sheets/             Generador de la plantilla + apps_script/ (Codigo.gs, appsscript.json)
   interfaz/                  Interfaz gráfica (Tkinter)
-  guias/                     Guía de uso y despliegue (se muestra dentro de la app)
+  guias/                     Guía de despliegue en .txt (se muestra y se descarga desde la app)
   cli.py, __main__.py        Línea de comandos y punto de entrada
 tests/                       Pruebas (pytest) y simulación del Apps Script (Node)
 empaquetado/                 PyInstaller: spec y lanzador

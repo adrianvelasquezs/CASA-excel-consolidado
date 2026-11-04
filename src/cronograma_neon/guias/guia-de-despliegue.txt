@@ -1,0 +1,311 @@
+GUÍA DE DESPLIEGUE
+Cronograma Bloque Neón consolidado en Google Sheets
+==============================================================================
+
+
+QUÉ ES
+------------------------------------------------------------------------------
+
+Un solo libro de Google Sheets con:
+
+  - una hoja por programa,
+  - una hoja "Consolidado" que junta todo automáticamente,
+  - permisos por cuenta institucional: cada persona solo puede editar
+    las columnas que le corresponden,
+  - y filas con dueño: lo que registra un profesor queda a su nombre
+    y ningún otro profesor puede modificarlo.
+
+La app "Cronograma Neon" genera el libro desde cero y entrega el
+código (Apps Script) que aplica los permisos dentro de Google Sheets.
+No hace falta ningún archivo de Excel de entrada.
+
+
+ANTES DE EMPEZAR
+------------------------------------------------------------------------------
+
+1. Use una cuenta @uniandes.edu.co del equipo CASA, idealmente la que
+   será dueña del archivo. Esa cuenta queda como administradora (ADMIN)
+   y es la que ejecuta las tareas automáticas del script.
+
+2. Todas las personas deben entrar a Google con su cuenta institucional
+   @uniandes.edu.co (normalmente con las mismas credenciales de
+   Microsoft). Si el navegador tiene abierta una cuenta personal de
+   Gmail, Google muestra "Solicitar acceso": hay que cambiar de cuenta
+   (foto de perfil, arriba a la derecha).
+
+3. Solo se admiten correos @uniandes.edu.co. Con una cuenta externa
+   (Gmail personal, otra universidad) el script no puede saber quién
+   editó, y por eso revierte sus cambios.
+
+4. Los grupos y listas de distribución de Microsoft 365 no existen en
+   Google. Registre a cada persona con su correo individual.
+
+5. Si la consola de Google Workspace de la universidad bloquea Apps
+   Script o las apps no verificadas, la autorización del paso 5 de la
+   puesta en marcha puede fallar. En ese caso, pídale a TI que permita
+   el proyecto (es interno del dominio).
+
+
+PUESTA EN MARCHA (UNA SOLA VEZ)
+------------------------------------------------------------------------------
+
+Paso 1. Generar el libro en la app
+   - Revise las pestañas "Columnas y permisos", "Programas" y
+     "Opciones" (ver más abajo cómo configurarlas).
+   - Clic en "Generar plantilla para Google Sheets..." y guarde el
+     archivo .xlsx donde quiera.
+
+Paso 2. Subirlo a Google Sheets
+   - En Google Drive: Nuevo > Subir archivo. Luego, sobre el archivo:
+     Abrir con > Hojas de cálculo de Google.
+   - De ahí en adelante trabaje sobre el archivo de Google Sheets,
+     no sobre el .xlsx.
+
+Paso 3. Llenar la hoja "Usuarios"
+   - Una fila por persona: correo, rol y programa(s).
+   - Incluya al menos a los ADMIN y al equipo CASA.
+   - Si el archivo está en una unidad compartida (sin dueño),
+     agréguese usted como ADMIN antes del paso 5.
+
+Paso 4. Instalar el script
+   - En el archivo de Google Sheets: Extensiones > Apps Script.
+   - En la app, clic en "Copiar Codigo.gs". En Apps Script, borre todo
+     el contenido de "Código.gs" y pegue.
+   - En Apps Script, abra la rueda de Configuración del proyecto y
+     marque "Mostrar el archivo de manifiesto appsscript.json".
+   - En la app, clic en "Copiar appsscript.json" y péguelo en ese
+     archivo, reemplazando su contenido.
+   - Guarde y recargue la hoja de cálculo. Aparece el menú "CASA".
+
+Paso 5. Menú CASA > 1. Configurar libro
+   - Autorice los permisos que pide Google.
+   - Esto escribe la fórmula del Consolidado, crea las protecciones e
+     instala las tareas automáticas.
+   - Lea el resumen: avisa si hay roles inválidos, programas que no
+     existen o correos externos.
+
+Paso 6. Menú CASA > 2. Compartir con los correos de Usuarios
+   - Da acceso de edición a todas las personas de la hoja Usuarios.
+     Como las protecciones ya están puestas, cada quien solo podrá
+     modificar lo suyo.
+   - Comparta además el enlace del archivo por Teams: el aviso de
+     Google puede no llegar a Outlook (ver PROBLEMAS FRECUENTES).
+
+Paso 7. Restringir quién puede compartir
+   - Botón Compartir > rueda de configuración > desmarque "Los editores
+     pueden cambiar los permisos y compartir".
+
+
+USO DIARIO
+------------------------------------------------------------------------------
+
+Dar de alta, de baja o cambiar el rol de alguien
+   Edite la hoja Usuarios y use Menú CASA > Aplicar permisos ahora.
+   Para una persona nueva, use también Menú CASA > 2. Compartir.
+
+Cambiar quién edita una columna (con el libro ya en uso)
+   Edite SI / NO en la hoja "Permisos" y use
+   Menú CASA > Aplicar permisos ahora.
+   No cambie los nombres de las columnas en esa hoja.
+
+Agregar, quitar o reordenar columnas
+   Hágalo en la app y genere un libro nuevo. El libro que ya está en
+   uso no cambia de estructura.
+
+Ver intentos de edición no permitidos
+   Menú CASA > Ver auditoría.
+
+Recuperar algo que se borró o se pegó mal
+   Archivo > Historial de versiones, o clic derecho en una celda >
+   Mostrar historial de ediciones.
+
+Necesito más filas en un programa
+   Agregue filas al final de la hoja, copie hacia abajo la fórmula de
+   la columna "Programa" y use Menú CASA > Aplicar permisos ahora.
+
+Filtrar sin molestar a los demás
+   Use Datos > Vistas de filtro. El filtro normal está bloqueado
+   porque cambiaría la vista de todos.
+
+Liberar una fila registrada por error
+   Quien la registró borra todo lo que escribió en ella; la fila queda
+   libre de nuevo.
+
+
+CONFIGURAR EN LA APP
+------------------------------------------------------------------------------
+
+Pestaña "Columnas y permisos"
+   Las columnas de cada hoja de programa, en orden. Para cada una:
+     - Nombre.
+     - Tipo: texto, número, fecha, SI / NO o lista de opciones.
+     - Ancho.
+     - Quién puede editarla: Profesores, Gestores, CASA.
+       ADMIN siempre puede editar todo.
+     - "Identifica el curso": la fila cuenta como registrada cuando
+       alguna de estas columnas tiene datos.
+
+   Cambiar una columna: selecciónela en la tabla, ajuste el formulario
+   y clic en "Guardar cambios de la columna".
+   Crear una columna: llene el formulario y clic en "Agregar como
+   columna nueva" (queda debajo de la seleccionada).
+   Cambiar el orden: botones "Subir" y "Bajar".
+
+Pestaña "Programas"
+   Una hoja por programa. Agregue, renombre, quite o reordene.
+
+Pestaña "Opciones"
+   Filas de registro por programa, dominio institucional, hora de la
+   restauración diaria de permisos, alertas por correo y si los
+   gestores pueden editar las filas de sus profesores.
+   Si cambia esto con el libro ya en uso, vuelva a copiar Codigo.gs y
+   péguelo en Apps Script.
+
+Compartir la configuración con el equipo
+   "Exportar configuración..." genera un archivo .json. La otra persona
+   lo carga con "Importar configuración...".
+   "Restablecer predeterminada" vuelve a los 12 programas y las
+   columnas originales del Cronograma 2027.
+
+Todo lo que cambie en la app se guarda solo. Los archivos que genera
+(plantilla, Codigo.gs, appsscript.json) se guardan donde usted elija.
+
+
+COLORES DE LOS ENCABEZADOS
+------------------------------------------------------------------------------
+
+   Azul       Profesores y/o gestores del programa
+   Verde      Equipo CASA
+   Amarillo   El programa y el equipo CASA
+   Gris       Solo ADMIN. Incluye "Programa", "Registrado por" y
+              "Fecha de registro", que llena el sistema.
+
+El color es solo una ayuda visual. Los permisos reales los define la
+hoja "Permisos".
+
+La configuración predeterminada incluye, al final y solo para CASA:
+   - ¿Se entregó reporte?  (SI / NO)
+   - Razones de porqué están pendientes reportes
+   - Razones de porqué no se realizó medición
+
+
+ROLES (HOJA "USUARIOS")
+------------------------------------------------------------------------------
+
+   ADMIN      Todo el libro. Es el único que usa el menú CASA.
+   CASA       Las columnas marcadas para CASA, en todos los programas.
+   GESTOR     Las columnas marcadas para Gestores, en su(s) programa(s),
+              incluidas las filas de sus profesores.
+   PROFESOR   Las columnas marcadas para Profesores, en su(s)
+              programa(s). Las filas que registra quedan solo para
+              quien las registró (además de los gestores, CASA en sus
+              columnas y ADMIN).
+
+Para varios programas, sepárelos con coma en la columna Programa(s):
+   AFIN, MF
+
+
+CÓMO SE PROTEGE EL LIBRO
+------------------------------------------------------------------------------
+
+1. Protecciones de Google por correo
+   Google no deja editar lo que no corresponde: encabezados, columnas
+   del sistema y las hojas Usuarios, Consolidado, Permisos e
+   Instrucciones son solo para ADMIN; cada grupo de columnas, solo para
+   los roles marcados en la hoja Permisos.
+
+2. Filas con dueño
+   Cuando un profesor escribe en una fila vacía, el script anota su
+   correo y la fecha en "Registrado por" y "Fecha de registro", y
+   protege la fila para esa persona.
+
+3. Red de seguridad
+   En Google Sheets, quien puede editar un rango protegido también
+   puede quitarle la protección. Por eso el script revisa cada edición.
+   Si alguien edita algo que no le corresponde:
+     - la deshace (si fue una sola celda),
+     - la anota en la hoja oculta "_Auditoria",
+     - avisa por correo a los ADMIN,
+     - y vuelve a poner las protecciones de esa hoja.
+   Además, todas las noches restaura todas las protecciones
+   (2 a. m. por defecto; la hora se cambia en la app).
+
+
+PRUEBA PILOTO ANTES DE ABRIRLO A TODOS
+------------------------------------------------------------------------------
+
+El script se probó en una simulación de Google Sheets (57 casos), pero
+todavía no en un Google Sheets real. Haga esta prueba con 3 o 4 cuentas
+reales antes de compartirlo con todos:
+
+   [ ] Profesor A escribe en una fila vacía de su programa.
+       Esperado: "Registrado por" se llena con su correo.
+
+   [ ] Profesor B (mismo programa) intenta editar esa fila.
+       Esperado: Google lo bloquea.
+
+   [ ] El gestor del programa edita esa fila.
+       Esperado: puede.
+
+   [ ] Alguien de CASA edita una columna verde de esa fila.
+       Esperado: puede.
+
+   [ ] Alguien de CASA intenta editar una columna azul.
+       Esperado: Google lo bloquea.
+
+   [ ] Un profesor de otro programa intenta editar la hoja.
+       Esperado: Google lo bloquea.
+
+   [ ] Alguien que no es ADMIN intenta editar encabezados, Usuarios,
+       Permisos o Consolidado.
+       Esperado: Google lo bloquea.
+
+   [ ] Un ADMIN cambia un permiso en la hoja Permisos y usa
+       Aplicar permisos ahora.
+       Esperado: el cambio se nota de inmediato.
+
+   [ ] Un ADMIN abre Menú CASA > Ver auditoría.
+       Esperado: no hay incidentes (lo que Google bloquea no llega al
+       script).
+
+Si alguien de CASA NO puede editar las columnas verdes de una fila que
+ya tiene dueño, avise: hay que ajustar cómo se protegen las filas.
+
+
+PROBLEMAS FRECUENTES Y LIMITACIONES
+------------------------------------------------------------------------------
+
+"Solicitar acceso" al abrir el archivo
+   La persona está con una cuenta personal de Gmail. Debe cambiar a su
+   cuenta @uniandes.edu.co.
+
+"No tienes permiso para editar"
+   Esa columna no le corresponde a su rol, o la fila es de otra
+   persona. Es el comportamiento esperado.
+
+No llegan los correos de Google ni las alertas
+   Los buzones de Uniandes están en Microsoft 365. Los correos de
+   Google solo llegan a Outlook si TI tiene el servicio Gmail
+   desactivado para esos usuarios o el enrutamiento configurado hacia
+   Microsoft. Pruebe con una alerta antes de depender de ellas, y
+   comparta el enlace del archivo también por Teams.
+
+Todos ven todo
+   Los permisos controlan quién modifica, no quién lee. Cualquiera con
+   acceso al archivo ve todos los programas y la hoja Usuarios. Si un
+   programa no debe ver a otro, hace falta un archivo por programa.
+
+Pegados de varias celdas
+   Si alguien logra pegar varias celdas donde no debía, el script no
+   puede deshacerlo solo: lo registra, avisa y restaura las
+   protecciones. Recupere con Archivo > Historial de versiones.
+
+Unos segundos de margen
+   Entre que un profesor escribe en una fila libre y el script la
+   protege pasan unos segundos.
+
+La cuenta que instaló el script ya no existe
+   Las tareas automáticas corren con la cuenta que ejecutó "Configurar
+   libro". Si esa cuenta se desactiva, otro ADMIN debe borrar las
+   tareas anteriores (Apps Script > Activadores) y volver a ejecutar
+   Menú CASA > 1. Configurar libro.

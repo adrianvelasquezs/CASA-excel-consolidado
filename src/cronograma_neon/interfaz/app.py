@@ -32,7 +32,7 @@ from ..google_sheets import generador as google
 
 COLOR = "#188038"
 COLOR_ERROR = "#C5221F"
-GUIA = Path(__file__).resolve().parent.parent / "guias" / "google-sheets.md"
+GUIA = Path(__file__).resolve().parent.parent / "guias" / "guia-de-despliegue.txt"
 TIPOS_EXCEL = [("Libro de Excel", "*.xlsx")]
 TIPOS_JSON = [("Configuración (JSON)", "*.json")]
 TIPO_POR_ETIQUETA = {etiqueta: clave for clave, etiqueta in TIPOS.items()}
@@ -508,6 +508,7 @@ class App(tk.Tk):
         fila.pack(anchor="w", pady=(4, 0))
         ttk.Button(fila, text="Guardar appsscript.json…", command=lambda: self.guardar_script("appsscript.json")).pack(side="left")
         ttk.Button(fila, text="Copiar appsscript.json", command=lambda: self.copiar_script("appsscript.json")).pack(side="left", padx=6)
+        ttk.Button(fila, text="Guardar guía (.txt)…", command=self.guardar_guia).pack(side="left")
 
         self.registro = Registro(cuerpo, "Resultado:")
         self.registro.pack(fill="both", expand=True, pady=(8, 0))
@@ -695,6 +696,17 @@ class App(tk.Tk):
         self.clipboard_clear()
         self.clipboard_append(texto)
         self.update()
+
+    def guardar_guia(self):
+        ruta = self.pedir_guardar("Guardar guía de despliegue", GUIA.name, ".txt", [("Texto", "*.txt")])
+        if not ruta:
+            return
+        try:
+            google.guardar_texto(ruta, GUIA.read_text(encoding="utf-8"))
+        except (OSError, ErrorGeneracion) as error:
+            messagebox.showerror("No se pudo guardar", str(error), parent=self)
+            return
+        self.registro.escribir(f"Guía guardada en {ruta}.")
 
     def ver_guia(self):
         try:

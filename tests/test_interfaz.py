@@ -123,3 +123,13 @@ def test_exportar_importar_y_generar(app, pequena, tmp_path):
 
     app.restablecer()
     assert app.configuracion == predeterminada()
+
+
+def test_guia_en_texto_plano(app, tmp_path):
+    assert interfaz.GUIA.suffix == ".txt" and interfaz.GUIA.exists()
+    texto = interfaz.GUIA.read_text(encoding="utf-8")
+    assert "PUESTA EN MARCHA" in texto and "**" not in texto
+    assert max(len(linea) for linea in texto.splitlines()) <= 78
+    app.dialogos["guardar"].append(str(tmp_path / "guia.txt"))
+    app.guardar_guia()
+    assert (tmp_path / "guia.txt").read_text(encoding="utf-8") == texto
