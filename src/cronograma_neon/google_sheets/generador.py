@@ -139,9 +139,11 @@ def _escribir_usuarios(wb, f, programas, dominio):
     ayuda = [
         f"Una fila por persona. Use el correo institucional @{dominio} con el que entra a Google.",
         "ADMIN: todo el libro (administra permisos). No necesita programa.",
-        "CASA: columnas verdes de todos los programas. No necesita programa.",
-        "GESTOR: columnas azules de su(s) programa(s), incluidas las filas de sus profesores.",
-        "PROFESOR: columnas azules de su(s) programa(s); las filas que registre quedan solo para quien las registró.",
+        "CASA: las columnas marcadas para CASA en la hoja «Permisos», en todos los programas. No necesita programa.",
+        "GESTOR: las columnas marcadas para Gestores en su(s) programa(s), incluidas las filas de sus profesores.",
+        "PROFESOR: las columnas marcadas para Profesores en su(s) programa(s); "
+        "las filas que registre quedan solo para quien las registró.",
+        f"Varios programas: sepárelos con coma (por ejemplo: {', '.join(programas[:2])}).",
         "Después de modificar esta hoja: menú CASA → Aplicar permisos ahora.",
     ]
     ws.write(0, 5, "Cómo llenar esta hoja", f["enc_tabla"])

@@ -55,11 +55,13 @@ Paso 1. Generar el libro en la app
    - Clic en "Generar plantilla para Google Sheets..." y guarde el
      archivo .xlsx donde quiera.
 
-Paso 2. Subirlo a Google Sheets
-   - En Google Drive: Nuevo > Subir archivo. Luego, sobre el archivo:
-     Abrir con > Hojas de cálculo de Google.
-   - De ahí en adelante trabaje sobre el archivo de Google Sheets,
-     no sobre el .xlsx.
+Paso 2. Convertirlo a Google Sheets
+   - En Google Drive: Nuevo > Subir archivo, y ábralo.
+   - Si junto al nombre del archivo aparece la etiqueta ".XLSX", el
+     archivo sigue siendo de Excel y NO tiene el menú Extensiones.
+     Use Archivo > Guardar como Hojas de cálculo de Google.
+   - Se abre una copia nueva, sin la etiqueta ".XLSX". Trabaje solo en
+     esa copia; puede borrar el .xlsx de Drive.
 
 Paso 3. Llenar la hoja "Usuarios"
    - Una fila por persona: correo, rol y programa(s).
@@ -274,6 +276,11 @@ ya tiene dueño, avise: hay que ajustar cómo se protegen las filas.
 
 PROBLEMAS FRECUENTES Y LIMITACIONES
 ------------------------------------------------------------------------------
+
+No aparece el menú Extensiones (o no aparece el menú CASA)
+   El archivo sigue en formato Excel: tiene la etiqueta ".XLSX" junto
+   al nombre. Use Archivo > Guardar como Hojas de cálculo de Google,
+   trabaje en la copia nueva e instale ahí el script (paso 4).
 
 "Solicitar acceso" al abrir el archivo
    La persona está con una cuenta personal de Gmail. Debe cambiar a su
