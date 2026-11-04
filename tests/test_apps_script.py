@@ -8,15 +8,16 @@ from pathlib import Path
 import openpyxl
 import pytest
 
+from cronograma_neon.comun.configuracion import predeterminada
 from cronograma_neon.google_sheets import generador as google
 
 SIMULACION = Path(__file__).resolve().parent / "apps_script" / "simulacion.js"
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="requiere Node.js")
-def test_simulacion_apps_script(plantillas, tmp_path):
+def test_simulacion_apps_script(tmp_path):
     destino = tmp_path / "plantilla.xlsx"
-    google.generar_plantilla([plantillas], destino)
+    google.generar_plantilla(predeterminada(), destino)
     estructura = {}
     for ws in openpyxl.load_workbook(destino).worksheets:
         estructura[ws.title] = {
@@ -24,6 +25,8 @@ def test_simulacion_apps_script(plantillas, tmp_path):
             "max_row": ws.max_row,
             "usuarios_hdr": [c.value for c in ws[1]][:4],
         }
+        if ws.title == "Permisos":
+            estructura[ws.title]["filas"] = [["" if v is None else v for v in fila[:5]] for fila in ws.iter_rows(values_only=True)]
     archivo = tmp_path / "estructura.json"
     archivo.write_text(json.dumps(estructura, ensure_ascii=False), encoding="utf-8")
 

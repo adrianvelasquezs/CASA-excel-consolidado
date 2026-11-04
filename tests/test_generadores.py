@@ -1,78 +1,100 @@
-import shutil
-
 import openpyxl
 import pytest
+from openpyxl.utils import get_column_letter
 
 from cronograma_neon import cli
-from cronograma_neon.comun.plantillas import (
-    AZUL_RAW,
-    COLUMNAS_ADICIONALES,
-    ErrorGeneracion,
-    leer_plantillas,
-    unificar_columnas,
-)
+from cronograma_neon.comun.configuracion import Columna, Configuracion, ErrorGeneracion, predeterminada
+from cronograma_neon.comun.estructura import COLORES
 from cronograma_neon.google_sheets import generador as google
 
-NUEVAS = [n for n, _, _ in COLUMNAS_ADICIONALES]
+NUEVAS = ["¿Se entregó reporte?", "Razones de porqué están pendientes reportes", "Razones de porqué no se realizó medición"]
 
 
-def test_lee_plantillas_desde_carpeta_o_archivos(plantillas):
-    desde_carpeta, _ = leer_plantillas([plantillas])
-    assert len(desde_carpeta) == 12
-    dos = sorted(plantillas.glob("*.xlsx"))[:2]
-    desde_archivos, _ = leer_plantillas(dos)
-    assert list(desde_archivos) == [p.name.split(" ")[0] for p in dos]
+def color(celda):
+    return celda.fill.fgColor.rgb[-6:].upper() if celda.fill.fill_type else None
 
 
-def test_rechaza_programa_repetido(plantillas, tmp_path):
-    original = next(plantillas.glob("AFIN*.xlsx"))
-    copia = tmp_path / "AFIN copia.xlsx"
-    shutil.copy(original, copia)
-    with pytest.raises(ErrorGeneracion, match="dos plantillas"):
-        leer_plantillas([original, copia])
+def test_predeterminada_conserva_el_cronograma_original():
+    config = predeterminada()
+    assert len(config.programas) == 12 and config.programas[0] == "AFIN"
+    nombres = [c.nombre for c in config.columnas]
+    assert len(nombres) == 34 and nombres[-3:] == NUEVAS
+    assert [c.nombre for c in config.columnas if c.identifica] == ["Código de curso", "CRN", "Curso"]
+    assert all(c.casa and not c.es_del_programa for c in config.columnas[-3:])  # columnas de reporte: solo CASA
+    curso = next(c for c in config.columnas if c.nombre == "Curso")
+    assert curso.profesores and curso.gestores and not curso.casa
 
 
-def test_rechaza_ruta_inexistente(tmp_path):
-    with pytest.raises(ErrorGeneracion, match="No existe"):
-        leer_plantillas([tmp_path / "no-existe"])
+@pytest.mark.parametrize("cambio, mensaje", [
+    (lambda c: c.programas.append("AAA"), "repetido"),
+    (lambda c: c.programas.append("Consolidado"), "reservado"),
+    (lambda c: c.programas.append("a/b"), "nombre de hoja"),
+    (lambda c: c.columnas.append(Columna("curso")), "repetida"),
+    (lambda c: c.columnas.append(Columna("Registrado por")), "sistema"),
+    (lambda c: c.columnas.append(Columna("Lista", tipo="lista", opciones=["Una"])), "dos opciones"),
+    (lambda c: c.columnas.append(Columna("Lista", tipo="lista", opciones=["a,b", "c"])), "comas"),
+    (lambda c: c.columnas.append(Columna("Ancha", ancho=500)), "ancho"),
+    (lambda c: [setattr(col, "identifica", False) for col in c.columnas], "Identifica el curso"),
+    (lambda c: c.columnas.clear(), "al menos una columna"),
+    (lambda c: setattr(c, "filas", 5), "filas"),
+])
+def test_validaciones(pequena, cambio, mensaje):
+    cambio(pequena)
+    with pytest.raises(ErrorGeneracion, match=mensaje):
+        pequena.validar()
 
 
-def test_columnas_nuevas_al_final_y_verdes(plantillas):
-    columnas, avisos = unificar_columnas(leer_plantillas([plantillas])[0])
-    assert [n for n, _ in columnas[-3:]] == NUEVAS
-    assert all(not es_azul for _, es_azul in columnas[-3:])  # verdes: solo CASA
-    assert len(columnas) == 35
-    assert not any(n in aviso for aviso in avisos for n in NUEVAS)  # no se reportan como faltantes
+def test_json_ida_y_vuelta(pequena, tmp_path):
+    ruta = tmp_path / "config.json"
+    pequena.guardar_json(ruta)
+    assert Configuracion.leer_json(ruta) == pequena
+    ruta.write_text("{no es json", encoding="utf-8")
+    with pytest.raises(ErrorGeneracion, match="JSON"):
+        Configuracion.leer_json(ruta)
 
 
-def test_columna_nueva_que_ya_trae_una_plantilla_no_se_duplica(plantillas, tmp_path):
-    original = next(plantillas.glob("AFIN*.xlsx"))
-    libro = openpyxl.load_workbook(original)
-    hoja = libro.worksheets[0]
-    hoja.cell(3, hoja.max_column + 1, NUEVAS[0])
-    copia = tmp_path / "AFIN con reporte.xlsx"
-    libro.save(copia)
-    columnas, _ = unificar_columnas(leer_plantillas([copia])[0])
-    assert [n for n, _ in columnas].count(NUEVAS[0]) == 1
-
-
-def test_plantilla_google(plantillas, tmp_path):
+def test_genera_desde_cero_con_columnas_y_permisos(pequena, tmp_path):
     destino = tmp_path / "salida" / "plantilla.xlsx"  # la carpeta de destino se crea si no existe
-    google.generar_plantilla([plantillas], destino, 20, {"DOMINIO": "ejemplo.edu.co"})
+    google.generar_plantilla(pequena, destino, {"DOMINIO": "ejemplo.edu.co"})
     libro = openpyxl.load_workbook(destino)
-    assert libro.sheetnames[0] == "Instrucciones" and libro.sheetnames[-2:] == ["Consolidado", "Usuarios"]
+    assert libro.sheetnames == ["Instrucciones", "AAA", "BBB", "Consolidado", "Permisos", "Usuarios"]
+
+    hoja = libro["AAA"]
+    encabezados = [c.value for c in hoja[3]]
+    assert encabezados == ["Programa", "Curso", "Inicio", "Nivel", "Estudiantes", "¿Revisado?", "Nota interna",
+                           "Registrado por", "Fecha de registro"]
+    colores = [color(c) for c in hoja[3]]
+    assert colores[1] == COLORES["programa"][0][1:]    # Curso: programa (azul)
+    assert colores[3] == COLORES["programa"][0][1:]    # Nivel: solo gestores, también del programa
+    assert colores[4] == COLORES["mixto"][0][1:]       # Estudiantes: programa y CASA
+    assert colores[5] == COLORES["casa"][0][1:]        # ¿Revisado?: CASA
+    assert colores[6] == COLORES["admin"][0][1:]       # Nota interna: solo ADMIN
+    assert hoja["A4"].value == '=IF(B4="","","AAA")'    # solo «Curso» identifica el curso
+    assert hoja.column_dimensions["B"].width == pytest.approx(30, abs=1)
+
+    listas = {str(dv.sqref).split(":")[0]: dv.formula1 for dv in hoja.data_validations.dataValidation if dv.type == "list"}
+    assert listas["D4"] == '"Bajo,Medio,Alto"' and listas["F4"] == '"SI,NO"'
+    tipos = {str(dv.sqref).split(":")[0]: dv.type for dv in hoja.data_validations.dataValidation}
+    assert tipos["C4"] == "date" and tipos["E4"] == "whole"
+
+    permisos = [list(f[:5]) for f in libro["Permisos"].iter_rows(min_row=1, max_row=7, values_only=True)]
+    assert permisos[0] == ["Columna", "Profesores", "Gestores", "CASA", "Identifica el curso"]
+    assert permisos[3] == ["Nivel", "NO", "SI", "NO", "NO"]
+    assert permisos[6] == ["Nota interna", "NO", "NO", "NO", "NO"]
+    assert [c.value for c in libro["Consolidado"][3]] == encabezados
     assert "@ejemplo.edu.co" in libro["Usuarios"]["F2"].value
 
-    hoja = libro["AFIN"]
+
+def test_predeterminada_genera_las_columnas_nuevas_en_verde(tmp_path):
+    destino = tmp_path / "p.xlsx"
+    google.generar_plantilla(predeterminada(), destino)
+    hoja = openpyxl.load_workbook(destino)["MF"]
     encabezados = [c.value for c in hoja[3]]
-    assert encabezados[-5:] == NUEVAS + list(google.COLUMNAS_SISTEMA)
-    for celda in hoja[3][-5:-2]:  # las nuevas tienen encabezado verde, no azul
-        assert celda.fill.fgColor.rgb != AZUL_RAW
-    col_reporte = encabezados.index("¿Se entregó reporte?") + 1
-    listas = [dv for dv in hoja.data_validations.dataValidation if dv.type == "list"]
-    reporte = next(dv for dv in listas if openpyxl.utils.get_column_letter(col_reporte) + "4" in dv.sqref)
-    assert reporte.formula1 == '"SI,NO"'
-    assert [c.value for c in libro["Consolidado"][3]] == encabezados
+    assert encabezados[-5:] == NUEVAS + ["Registrado por", "Fecha de registro"]
+    assert all(color(c) == COLORES["casa"][0][1:] for c in hoja[3][-5:-2])
+    reporte = get_column_letter(encabezados.index("¿Se entregó reporte?") + 1)
+    assert any(str(dv.sqref).startswith(reporte + "4") and dv.formula1 == '"SI,NO"'
+               for dv in hoja.data_validations.dataValidation)
 
 
 def test_config_apps_script():
@@ -87,23 +109,28 @@ def test_config_apps_script():
         google.codigo_apps_script({"HORA_RESTAURACION": 24})
 
 
-def test_cli_google(plantillas, tmp_path):
-    assert cli.main(["google", "--plantillas", str(plantillas), "--salida", str(tmp_path / "gs.xlsx"),
-                     "--apps-script", str(tmp_path / "as"), "--dominio", "ejemplo.edu.co", "--filas", "20"]) == 0
-    assert (tmp_path / "gs.xlsx").exists()
+def test_cli_con_configuracion_propia(pequena, tmp_path):
+    pequena.guardar_json(tmp_path / "c.json")
+    assert cli.main(["google", "--config", str(tmp_path / "c.json"), "--salida", str(tmp_path / "gs.xlsx"),
+                     "--filas", "15", "--apps-script", str(tmp_path / "as"), "--dominio", "ejemplo.edu.co"]) == 0
+    libro = openpyxl.load_workbook(tmp_path / "gs.xlsx")
+    assert libro.sheetnames[1:3] == ["AAA", "BBB"]
     assert "DOMINIO: 'ejemplo.edu.co'," in (tmp_path / "as" / "Codigo.gs").read_text(encoding="utf-8")
-    assert (tmp_path / "as" / "appsscript.json").exists()
 
 
-def test_cli_ya_no_tiene_onedrive(capsys):
+def test_cli_exportar_y_usar_predeterminada(tmp_path):
+    assert cli.main(["exportar-configuracion", "--salida", str(tmp_path / "pred.json")]) == 0
+    assert Configuracion.leer_json(tmp_path / "pred.json") == predeterminada()
+    assert cli.main(["google", "--salida", str(tmp_path / "gs.xlsx")]) == 0
+
+
+def test_cli_errores_legibles(tmp_path, capsys):
+    (tmp_path / "malo.json").write_text('{"programas": [], "columnas": []}', encoding="utf-8")
+    assert cli.main(["google", "--config", str(tmp_path / "malo.json"), "--salida", str(tmp_path / "x.xlsx")]) == 1
+    assert "Error: Agregue al menos un programa" in capsys.readouterr().err
+    assert not (tmp_path / "x.xlsx").exists()
     with pytest.raises(SystemExit):
         cli.main(["onedrive", "--help"])
-    assert "invalid choice" in capsys.readouterr().err
-
-
-def test_cli_error_legible(tmp_path, capsys):
-    assert cli.main(["google", "--plantillas", str(tmp_path / "nada"), "--salida", str(tmp_path / "x.xlsx")]) == 1
-    assert "Error: No existe" in capsys.readouterr().err
 
 
 def test_verificar(tmp_path):

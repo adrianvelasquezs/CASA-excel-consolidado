@@ -1,0 +1,363 @@
+{
+  "version": 1,
+  "filas": 150,
+  "programas": [
+    "AFIN",
+    "EMBA",
+    "IMER",
+    "MBAOnline",
+    "MDP",
+    "MF",
+    "MGA",
+    "MGEST",
+    "MM",
+    "MSCM",
+    "PTMBA",
+    "Pregrado-CEMS"
+  ],
+  "columnas": [
+    {
+      "nombre": "Código de curso",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 27,
+      "profesores": true,
+      "gestores": true,
+      "casa": false,
+      "identifica": true
+    },
+    {
+      "nombre": "CRN",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 14,
+      "profesores": true,
+      "gestores": true,
+      "casa": false,
+      "identifica": true
+    },
+    {
+      "nombre": "Curso",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 14,
+      "profesores": true,
+      "gestores": true,
+      "casa": false,
+      "identifica": true
+    },
+    {
+      "nombre": "Profesor",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 14,
+      "profesores": true,
+      "gestores": true,
+      "casa": false,
+      "identifica": false
+    },
+    {
+      "nombre": "Asistente académico",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 17,
+      "profesores": true,
+      "gestores": true,
+      "casa": false,
+      "identifica": false
+    },
+    {
+      "nombre": "Mes de inicio y finalización",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 19,
+      "profesores": true,
+      "gestores": true,
+      "casa": false,
+      "identifica": false
+    },
+    {
+      "nombre": "Fecha exacta inicio",
+      "tipo": "fecha",
+      "opciones": [],
+      "ancho": 21,
+      "profesores": true,
+      "gestores": true,
+      "casa": false,
+      "identifica": false
+    },
+    {
+      "nombre": "Fecha exacta de finalización",
+      "tipo": "fecha",
+      "opciones": [],
+      "ancho": 14,
+      "profesores": true,
+      "gestores": true,
+      "casa": false,
+      "identifica": false
+    },
+    {
+      "nombre": "Tipo de curso según mapeo",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 18,
+      "profesores": true,
+      "gestores": true,
+      "casa": false,
+      "identifica": false
+    },
+    {
+      "nombre": "Competencia",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 19,
+      "profesores": true,
+      "gestores": true,
+      "casa": false,
+      "identifica": false
+    },
+    {
+      "nombre": "Número de Competencia a evaluar",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 28,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Objetivos de aprendizaje a medir",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 25,
+      "profesores": true,
+      "gestores": true,
+      "casa": false,
+      "identifica": false
+    },
+    {
+      "nombre": "Número de objetivo a medir",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 24,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Nombre de criterios a evaluar",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 25,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Número criterios a evaluar",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 28,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Periodo de enlaces anteriores",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 18,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Enlaces Bloque Neón cohorte anterior",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 17,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Montaje rúbricas Bloque Neón (SI / NO)",
+      "tipo": "si_no",
+      "opciones": [],
+      "ancho": 29,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Enlace Bloque Neón",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 20,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Observaciones sobre aplicación pasada",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 28,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Número de competencias evaluadas",
+      "tipo": "numero",
+      "opciones": [],
+      "ancho": 20,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Número de estudiantes inscritos curso",
+      "tipo": "numero",
+      "opciones": [],
+      "ancho": 19,
+      "profesores": true,
+      "gestores": true,
+      "casa": false,
+      "identifica": false
+    },
+    {
+      "nombre": "Rúbrica asociada a actividad",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 14,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Nombre actividad",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 14,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Número de actividades evaluadas",
+      "tipo": "numero",
+      "opciones": [],
+      "ancho": 18,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Número de estudiantes evaluados",
+      "tipo": "numero",
+      "opciones": [],
+      "ancho": 20,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Variabilidad en las notas? Responder Sí o No",
+      "tipo": "lista",
+      "opciones": [
+        "Sí",
+        "No"
+      ],
+      "ancho": 22,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Número de criterios evaluados",
+      "tipo": "numero",
+      "opciones": [],
+      "ancho": 16,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Número de objetivos evaluados",
+      "tipo": "numero",
+      "opciones": [],
+      "ancho": 18,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Comentarios de la revisión",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 37,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Reuniones con profesor",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 54,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "¿Se entregó reporte?",
+      "tipo": "si_no",
+      "opciones": [],
+      "ancho": 18,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Razones de porqué están pendientes reportes",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 45,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    },
+    {
+      "nombre": "Razones de porqué no se realizó medición",
+      "tipo": "texto",
+      "opciones": [],
+      "ancho": 45,
+      "profesores": false,
+      "gestores": false,
+      "casa": true,
+      "identifica": false
+    }
+  ]
+}

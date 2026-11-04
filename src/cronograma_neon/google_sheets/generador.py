@@ -1,8 +1,9 @@
 """
-Versión Google Sheets: plantilla para importar a Google Sheets + Apps Script de permisos.
+Plantilla para importar a Google Sheets + Apps Script de permisos.
 
-La plantilla NO lleva contraseñas ni protecciones de Excel: los permisos los
-aplica el Apps Script (apps_script/Codigo.gs) según los correos de la hoja
+El libro se genera desde cero a partir de la Configuracion (programas,
+columnas y quién edita cada una). Los permisos los aplica el Apps Script
+(apps_script/Codigo.gs) según la hoja «Permisos» y los correos de la hoja
 «Usuarios». Las opciones del script (dominio, alertas, etc.) se aplican al
 exportar el código; el archivo del paquete no se modifica.
 """
@@ -13,16 +14,15 @@ from pathlib import Path
 
 import xlsxwriter
 
-from ..comun.plantillas import (
-    ErrorGeneracion,
+from ..comun.configuracion import COLUMNAS_SISTEMA, ErrorGeneracion
+from ..comun.estructura import (
+    COLORES,
     crear_formatos,
-    escribir_base_programa,
     escribir_encabezados_consolidado,
+    escribir_hoja_permisos,
+    escribir_hoja_programa,
     escribir_lineas,
-    leer_plantillas,
     reemplazar_archivo,
-    unificar_columnas,
-    validar_filas,
 )
 
 NOMBRE_SUGERIDO = "Cronograma 2027 Bloque Neón - Google Sheets.xlsx"
@@ -30,8 +30,7 @@ CARPETA_APPS_SCRIPT = Path(__file__).resolve().parent / "apps_script"
 ARCHIVO_CODIGO = CARPETA_APPS_SCRIPT / "Codigo.gs"
 ARCHIVO_MANIFIESTO = CARPETA_APPS_SCRIPT / "appsscript.json"
 
-# Deben coincidir con CONFIG en apps_script/Codigo.gs
-COLUMNAS_SISTEMA = ("Registrado por", "Fecha de registro")
+# Deben coincidir con apps_script/Codigo.gs
 ROLES = ["ADMIN", "CASA", "GESTOR", "PROFESOR"]
 FILAS_USUARIOS = 500
 
@@ -152,57 +151,57 @@ def _escribir_usuarios(wb, f, programas, dominio):
 
 def _escribir_instrucciones(wb, f, programas, dominio):
     ws = wb.add_worksheet("Instrucciones")
+    colores = [("texto", f"• {COLORES[c][2].upper()}: {texto}") for c, texto in (
+        ("programa", "las editan los profesores y gestores del programa dueño de la hoja."),
+        ("casa", "las edita solo el equipo CASA."),
+        ("mixto", "las editan el programa y el equipo CASA."),
+        ("admin", "solo administración (incluye «Programa», «Registrado por» y «Fecha de registro», que llena el sistema)."),
+    )]
     escribir_lineas(ws, f, [
         ("h1", "Cronograma 2027 Bloque Neón — Consolidado"),
-        ("texto", "Este libro reúne en un solo archivo las plantillas de todos los programas. "
+        ("texto", "Este libro reúne en un solo archivo el registro de todos los programas. "
                   "Cada programa tiene su propia hoja; la hoja «Consolidado» las une automáticamente."),
-        ("h2", "¿Qué puede editar cada quien?"),
-        ("texto", "• Celdas AZULES: profesores y gestores del programa dueño de la hoja."),
+        ("h2", "¿Qué puede editar cada quien? (color del encabezado)"),
+        *colores,
+        ("texto", "• El detalle de cada columna está en la hoja «Permisos»."),
         ("texto", "• Cuando un profesor registra un curso en una fila, esa fila queda a su nombre "
-                  "(columna «Registrado por») y ningún otro profesor puede modificarla. "
-                  "Los gestores del programa sí pueden."),
-        ("texto", "• Celdas VERDES: solo el equipo CASA."),
-        ("texto", "• Títulos, la columna «Programa», «Registrado por», «Fecha de registro», "
-                  "y las hojas Consolidado, Usuarios e Instrucciones: solo administración."),
+                  "(columna «Registrado por») y ningún otro profesor puede modificarla."),
+        ("texto", "• Las hojas Consolidado, Permisos, Usuarios e Instrucciones: solo administración."),
         ("h2", "¿Cómo se usa?"),
         ("texto", f"1. Entre a Google con su cuenta institucional @{dominio} (no con una cuenta personal de Gmail)."),
         ("texto", "2. Abra la hoja de su programa y registre cada curso en una fila vacía."),
         ("texto", "3. Si Google muestra «No tienes permiso para editar», esa celda no le corresponde a su rol "
                   "o la fila es de otro profesor."),
-        ("texto", "4. Para liberar una fila que registró por error, borre todo su contenido azul: "
+        ("texto", "4. Para liberar una fila que registró por error, borre todo lo que escribió en ella: "
                   "la fila vuelve a quedar disponible."),
-        ("texto", "5. Las fechas van en formato dd/mm/aaaa; las columnas SI/NO tienen lista desplegable."),
+        ("texto", "5. Las fechas van en formato dd/mm/aaaa; las columnas con opciones tienen lista desplegable."),
         ("h2", "Programas incluidos"),
         ("texto", ", ".join(programas)),
     ])
 
 
-def generar_plantilla(rutas_plantillas, destino, filas=150, config_apps_script=None):
-    """Genera la plantilla para Google Sheets en `destino`. Devuelve los mensajes para el usuario."""
-    validar_filas(filas)
+def generar_plantilla(configuracion, destino, config_apps_script=None):
+    """Genera desde cero la plantilla para Google Sheets en `destino`. Devuelve los mensajes para el usuario."""
+    configuracion.validar()
     dominio = validar_config_apps_script(config_apps_script)["DOMINIO"]
-    plantillas, anchos = leer_plantillas(rutas_plantillas)
-    programas = list(plantillas)
-    columnas, mensajes = unificar_columnas(plantillas)
+    programas = list(configuracion.programas)
 
     with tempfile.TemporaryDirectory() as tmp:
         temporal = Path(tmp) / "plantilla.xlsx"
         wb = xlsxwriter.Workbook(str(temporal))
         f = crear_formatos(wb)
         _escribir_instrucciones(wb, f, programas, dominio)
-        for p in programas:
-            escribir_base_programa(
-                wb, f, p, columnas, anchos, filas,
-                "Gris = lo llena el sistema. Si no puede editar una celda, no corresponde a su rol.",
-                COLUMNAS_SISTEMA,
-            )
-        consolidado = escribir_encabezados_consolidado(wb, f, columnas, anchos, COLUMNAS_SISTEMA)
+        for programa in programas:
+            escribir_hoja_programa(wb, f, programa, configuracion)
+        consolidado = escribir_encabezados_consolidado(wb, f, configuracion)
         consolidado.write(1, 0, "La fórmula de esta hoja la escribe el script (menú CASA → Configurar libro).", f["nota"])
+        escribir_hoja_permisos(wb, f, configuracion)
         _escribir_usuarios(wb, f, programas, dominio)
         wb.close()
         reemplazar_archivo(temporal, destino)
 
-    mensajes.append(f"Plantilla guardada en: {destino}")
-    mensajes.append(f"{len(programas)} programas, {len(columnas)} columnas + {len(COLUMNAS_SISTEMA)} de sistema, "
-                    f"{filas} filas por programa.")
-    return mensajes
+    return [
+        f"Plantilla guardada en: {destino}",
+        f"{len(programas)} programas, {len(configuracion.columnas)} columnas + {len(COLUMNAS_SISTEMA)} del sistema, "
+        f"{configuracion.filas} filas por programa.",
+    ]
