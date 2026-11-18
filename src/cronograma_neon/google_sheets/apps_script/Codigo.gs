@@ -55,6 +55,7 @@ function onOpen() {
     .addItem('2. Compartir con los correos de «Usuarios»', 'compartirConUsuarios')
     .addSeparator()
     .addItem('Aplicar permisos ahora', 'aplicarPermisos')
+    .addItem('Agregar programa…', 'agregarPrograma')
     .addItem('Diagnosticar un correo…', 'diagnosticarCorreo')
     .addItem('Ver auditoría', 'verAuditoria')
     .addToUi();
@@ -123,6 +124,76 @@ function compartirConUsuarios() {
     '\n\nEl acceso de edición al archivo es necesario: las protecciones limitan qué celdas puede modificar cada uno.' +
     '\nComparta el enlace también por Teams (el aviso de Google puede no llegar a Outlook).' +
     '\n\nPermisos aplicados de nuevo:\n' + resumen_(r, leerUsuarios_(ss)), ui.ButtonSet.OK);
+}
+
+function agregarPrograma() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const u = exigirAdmin_(ss);
+  if (!u) return;
+  const programas = hojasPrograma_(ss);
+  if (!programas.length) {
+    ui.alert('No hay ninguna hoja de programa para usar como modelo.');
+    return;
+  }
+  const respuesta = ui.prompt('Agregar programa',
+    'Nombre del programa nuevo. Será el nombre de la hoja (máximo 31 caracteres), por ejemplo: MBA2', ui.ButtonSet.OK_CANCEL);
+  if (respuesta.getSelectedButton() !== ui.Button.OK) return;
+  const nombre = normalizar_(respuesta.getResponseText());
+  const problema = validarNombrePrograma_(ss, nombre);
+  if (problema) {
+    ui.alert('No se pudo agregar el programa', problema, ui.ButtonSet.OK);
+    return;
+  }
+  const hoja = crearHojaPrograma_(ss, nombre, programas);
+  actualizarListaProgramas_(ss);
+  const r = sincronizarTodo_(ss, leerUsuarios_(ss));
+  ss.setActiveSheet(hoja);
+  ui.alert('Programa agregado',
+    `Se creó la hoja «${nombre}» con las mismas columnas que «${programas[0].getName()}», vacía y ya incluida en el ` +
+    'Consolidado.\n\nSiguiente paso: en la hoja Usuarios agregue a sus gestores y profesores con el programa ' +
+    `«${nombre}» y use CASA → 2. Compartir.\n\nPara que este programa también esté en los libros que se generen ` +
+    'en el futuro, agréguelo en la app (pestaña Programas).\n\n' + resumen_(r, leerUsuarios_(ss)), ui.ButtonSet.OK);
+}
+
+/** Devuelve por qué el nombre no sirve para un programa nuevo, o null si sirve. */
+function validarNombrePrograma_(ss, nombre) {
+  if (!nombre) return 'Escriba el nombre del programa.';
+  if (nombre.length > 31 || /[\[\]:*?\/\\']/.test(nombre)) {
+    return `«${nombre}» no sirve como nombre de hoja: máximo 31 caracteres y sin [ ] : * ? / \\ '`;
+  }
+  if (nombre.startsWith('_') || HOJAS_ESPECIALES.some(h => claveTexto_(h) === claveTexto_(nombre))) {
+    return `«${nombre}» es un nombre reservado del libro.`;
+  }
+  const existente = ss.getSheets().find(h => claveTexto_(h.getName()) === claveTexto_(nombre));
+  return existente ? `Ya existe una hoja llamada «${existente.getName()}».` : null;
+}
+
+/** Copia una hoja de programa (mismas columnas, formatos y listas), la vacía y la adapta al programa nuevo. */
+function crearHojaPrograma_(ss, nombre, programas) {
+  const hoja = programas[0].copyTo(ss).setName(nombre);
+  ss.setActiveSheet(hoja);
+  ss.moveActiveSheet(programas[programas.length - 1].getIndex() + 1);  // junto a los demás programas
+  const cols = columnas_(hoja, leerPermisos_(ss));
+  hoja.getRange(CONFIG.PRIMERA_FILA, 1, hoja.getMaxRows() - CONFIG.PRIMERA_FILA + 1, cols.ancho).clearContent();
+  restaurarFormulaPrograma_(hoja, cols, CONFIG.PRIMERA_FILA, hoja.getMaxRows());
+  const titulo = hoja.getRange(1, 1, 2, hoja.getLastColumn()).getValues();
+  titulo.forEach((fila, i) => fila.forEach((valor, j) => {
+    if (String(valor).startsWith('Programa: ')) hoja.getRange(i + 1, j + 1).setValue('Programa: ' + nombre);
+  }));
+  return hoja;
+}
+
+/** Lista desplegable de la columna Programa(s) de Usuarios con las hojas de programa actuales. */
+function actualizarListaProgramas_(ss) {
+  const hoja = ss.getSheetByName(CONFIG.HOJA_USUARIOS);
+  if (!hoja) return;
+  const regla = SpreadsheetApp.newDataValidation()
+    .requireValueInList(hojasPrograma_(ss).map(h => h.getName()), true)
+    .setAllowInvalid(true)  // permite escribir varios programas separados por coma
+    .setHelpText('Para varios programas, sepárelos con coma.')
+    .build();
+  hoja.getRange(2, 3, Math.max(hoja.getMaxRows() - 1, 1), 1).setDataValidation(regla);
 }
 
 function diagnosticarCorreo() {
@@ -738,11 +809,18 @@ function restaurarFormulaPrograma_(hoja, cols, r1, r2) {
   const claves = cols.identifican.map(letraColumna_);
   const ini = Math.max(r1, CONFIG.PRIMERA_FILA);
   if (r2 < ini) return;
-  const formulas = [];
-  for (let r = ini; r <= r2; r++) {
-    formulas.push([`=IF(${claves.map(l => l + r).join('&')}="","","${hoja.getName()}")`]);
+  const programa = hoja.getName().replace(/"/g, '""');
+  // El separador de argumentos depende de la configuración regional del libro («;» en España o Colombia):
+  // se escribe con «,» y, si Sheets no puede leerla, se reescribe con «;».
+  for (const sep of [',', ';']) {
+    const formulas = [];
+    for (let r = ini; r <= r2; r++) {
+      formulas.push([`=IF(${claves.map(l => l + r).join('&')}=""${sep}""${sep}"${programa}")`]);
+    }
+    hoja.getRange(ini, col, formulas.length, 1).setFormulas(formulas);
+    SpreadsheetApp.flush();
+    if (!String(hoja.getRange(ini, col).getDisplayValue()).startsWith('#')) return;
   }
-  hoja.getRange(ini, col, formulas.length, 1).setFormulas(formulas);
 }
 
 /** Escribe la fórmula del Consolidado. Devuelve null si quedó funcionando, o el problema para mostrar. */

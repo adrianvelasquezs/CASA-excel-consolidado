@@ -59,13 +59,24 @@ class Rango {
   contiene(r, c) { return r >= this.r && r < this.r + this.nr && c >= this.c && c < this.c + this.nc; }
   protect() { const p = new Proteccion(this.hoja, 'RANGE', this); this.hoja.protecciones.push(p); return p; }
   setNumberFormat() { return this; } setFontWeight() { return this; } setBackground() { return this; }
+  setDataValidation(regla) { this.hoja.validaciones.push({ rango: this.getA1Notation(), regla }); return this; }
 }
 
 class Hoja {
+  get validaciones() { return this._validaciones || (this._validaciones = []); }
   constructor(nombre, maxFilas, maxCols) { Object.assign(this, { nombre, maxFilas, maxCols, datos: {}, fondos: {}, formulas: {}, protecciones: [], oculta: false }); }
   valor(r, c) { const v = this.datos[`${r},${c}`]; return v === undefined ? '' : v; }
   set(r, c, v) { this.datos[`${r},${c}`] = v; }
   getName() { return this.nombre; }
+  setName(n) { this.nombre = n; return this; }
+  getIndex() { return hojas.indexOf(this) + 1; }
+  // Copia contenido, formatos y fórmulas; como en Google, las protecciones no se copian.
+  copyTo() {
+    const h = new Hoja('Copia de ' + this.nombre, this.maxFilas, this.maxCols);
+    Object.assign(h.datos, this.datos); Object.assign(h.fondos, this.fondos); Object.assign(h.formulas, this.formulas);
+    hojas.push(h);
+    return h;
+  }
   getRange(r, c, nr, nc) { return new Rango(this, r, c, nr, nc); }
   getMaxRows() { return this.maxFilas; }
   getLastRow() { let m = 0; Object.keys(this.datos).forEach(k => { const [r] = k.split(',').map(Number); if (this.datos[k] !== '') m = Math.max(m, r); }); return m; }
@@ -101,6 +112,8 @@ const ss = {
   getSheets: () => hojas,
   getSheetByName: n => hojas.find(h => h.nombre === n) || null,
   insertSheet: n => { const h = new Hoja(n, 1000, 26); hojas.push(h); return h; },
+  setActiveSheet: h => { ss.activa = h; return h; },
+  moveActiveSheet: pos => { hojas.splice(hojas.indexOf(ss.activa), 1); hojas.splice(pos - 1, 0, ss.activa); },
   getOwner: () => user(DUENO),
   getEditors: () => [...colaboradores].map(user),
   getViewers: () => [],
@@ -108,6 +121,7 @@ const ss = {
   getId: () => 'x',
 };
 const alertas = [];
+let respuestaPrompt = '';  // lo que «escribe» el usuario en los cuadros de diálogo
 const props = {};
 const ctx = {
   console: { log() {}, warn: m => console.log('   [warn]', m), error: m => console.log('   [error]', m) },
@@ -115,7 +129,12 @@ const ctx = {
     getActiveSpreadsheet: () => ss,
     ProtectionType: { RANGE: 'RANGE', SHEET: 'SHEET' },
     flush() {},
-    getUi: () => ({ alert: (...a) => { alertas.push(a.filter(x => typeof x === 'string').join(' | ')); return 'YES'; }, ButtonSet: { OK: 1, YES_NO: 2, OK_CANCEL: 3 }, Button: { YES: 'YES', OK: 'OK' },
+    newDataValidation: () => {
+      const regla = { lista: null };
+      const b = { requireValueInList: l => { regla.lista = l; return b; }, setAllowInvalid: () => b, setHelpText: () => b, build: () => regla };
+      return b;
+    },
+    getUi: () => ({ prompt: () => ({ getSelectedButton: () => 'OK', getResponseText: () => respuestaPrompt }), alert: (...a) => { alertas.push(a.filter(x => typeof x === 'string').join(' | ')); return 'YES'; }, ButtonSet: { OK: 1, YES_NO: 2, OK_CANCEL: 3 }, Button: { YES: 'YES', OK: 'OK' },
       createMenu: () => ({ addItem() { return this; }, addSeparator() { return this; }, addToUi() {} }) }),
   },
   Session: { getActiveUser: () => user(usuarioActual), getEffectiveUser: () => user(DUENO) },
@@ -311,6 +330,35 @@ vm.runInContext('compartirConUsuarios()', ctx);
 ok(alertas[alertas.length - 1].includes('Permisos aplicados de nuevo'), 'Compartir vuelve a aplicar los permisos');
 const d2 = diag('gestor.afin@uniandes.edu.co');
 ok(d2.includes('Acceso al archivo: Editor') && !d2.includes('PROBLEMAS'), 'Diagnóstico tras compartir: sin problemas');
+
+console.log('\n10) Agregar programa con el libro en uso');
+usuarioActual = DUENO;
+H('AFIN').set(70, B, 'dato de AFIN');
+respuestaPrompt = '  NUEVO-PROG ';
+vm.runInContext('agregarPrograma()', ctx);
+const NP = H('NUEVO-PROG');
+ok(NP && NP.getIndex() === H('Pregrado-CEMS').getIndex() + 1, 'Crea la hoja junto a los demás programas');
+const encabezados = h => Array.from({ length: 45 }, (_, i) => h.valor(3, i + 1));
+ok(JSON.stringify(encabezados(NP)) === JSON.stringify(encabezados(H('AFIN'))), 'Tiene las mismas columnas que los demás programas');
+ok(NP.valor(70, B) === '' && NP.valor(5, REG) === '' && NP.valor(5, D) === '', 'Queda vacía (no copia datos ni dueños de filas)');
+ok(NP.formulas[`4,${PROG}`] === `=IF(B4&C4&D4=""${separador}""${separador}"NUEVO-PROG")`,
+   `La columna Programa usa el nombre nuevo (separador «${separador}»)`);
+ok(H('Consolidado').formulas['4,1'].includes("'NUEVO-PROG'!A4"), 'Queda incluida en el Consolidado');
+ok(NP.protecciones.some(p => p.desc.includes('colPG-|')) && NP.protecciones.some(p => p.tipo === 'SHEET'), 'Sus columnas quedan protegidas');
+const lista = H('Usuarios').validaciones.slice(-1)[0];
+ok(lista && lista.regla.lista.includes('NUEVO-PROG'), 'La lista de programas de Usuarios incluye el nuevo');
+ok(alertas[alertas.length - 1].startsWith('Programa agregado'), 'Confirma la creación con los siguientes pasos');
+U.set(20, 1, 'gestor.nuevo@uniandes.edu.co'); U.set(20, 2, 'GESTOR'); U.set(20, 3, 'nuevo-prog');
+vm.runInContext('aplicarPermisos()', ctx);
+ok(editar('gestor.nuevo@uniandes.edu.co', 'NUEVO-PROG', 10, B, 'NP-1') === 'EDITADO' && NP.valor(10, B) === 'NP-1',
+   'Su gestor (escrito en minúsculas en Usuarios) edita la hoja nueva');
+ok(editar('gestor.afin@uniandes.edu.co', 'NUEVO-PROG', 11, B, 'x') === 'BLOQUEADO', 'El gestor de otro programa no la edita');
+for (const [nombre, esperado] of [['nuevo-prog', 'Ya existe'], ['Usuarios', 'reservado'], ['a/b', 'no sirve'], ['', 'Escriba']]) {
+  const antes = hojas.length;
+  respuestaPrompt = nombre;
+  vm.runInContext('agregarPrograma()', ctx);
+  ok(hojas.length === antes && alertas[alertas.length - 1].includes(esperado), `Rechaza el nombre «${nombre}» (${esperado})`);
+}
 
 H('Consolidado').formulas['4,1'] = "=ARRAYFORMULA(IFNA(FILTER(VSTACK('AFIN'!A4:AK),'roto'),\"x\"))";
 usuarioActual = DUENO;

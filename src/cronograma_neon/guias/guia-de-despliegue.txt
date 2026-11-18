@@ -118,6 +118,19 @@ Cambiar quién edita una columna (con el libro ya en uso)
    Menú CASA > Aplicar permisos ahora.
    No cambie los nombres de las columnas en esa hoja.
 
+Agregar un programa (con el libro ya en uso)
+   Menú CASA > Agregar programa... y escriba su nombre (será el nombre
+   de la hoja). El script crea la hoja con las mismas columnas que los
+   demás programas, vacía, protegida e incluida en el Consolidado.
+   Después:
+     1. En la hoja Usuarios, agregue a sus gestores y profesores con el
+        nombre del programa nuevo.
+     2. Use Menú CASA > 2. Compartir.
+     3. Agréguelo también en la app (pestaña Programas), para que esté
+        en los libros que se generen en el futuro.
+   No cree la hoja a mano: si sus columnas no son idénticas a las de
+   los demás programas, el Consolidado falla.
+
 Agregar, quitar o reordenar columnas
    Hágalo en la app y genere un libro nuevo. El libro que ya está en
    uso no cambia de estructura.
@@ -141,8 +154,7 @@ Necesito más filas en un programa
 El Consolidado
    Se actualiza solo: cada fila que se registra en una hoja de programa
    aparece ahí en segundos. Menú CASA > Aplicar permisos ahora también
-   vuelve a escribir su fórmula (por ejemplo, después de agregar una
-   hoja de programa).
+   vuelve a escribir su fórmula e incluye las hojas de programa nuevas.
 
 Filtrar sin molestar a los demás
    Use Datos > Vistas de filtro. El filtro normal está bloqueado
