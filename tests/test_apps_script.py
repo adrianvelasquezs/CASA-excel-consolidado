@@ -16,8 +16,13 @@ SIMULACION = Path(__file__).resolve().parent / "apps_script" / "simulacion.js"
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="requiere Node.js")
-@pytest.mark.parametrize("sin_permisos", [False, True], ids=["con_hoja_permisos", "sin_hoja_permisos"])
-def test_simulacion_apps_script(tmp_path, sin_permisos):
+@pytest.mark.parametrize("sin_permisos, variables", [
+    (False, {}),
+    (False, {"LOCALE_PUNTO_Y_COMA": "1"}),             # libro con configuración regional España / Colombia
+    (False, {"LOCALE_PUNTO_Y_COMA": "1", "SIN_VSTACK": "1"}),
+    (True, {}),
+], ids=["con_hoja_permisos", "regional_punto_y_coma", "punto_y_coma_sin_vstack", "sin_hoja_permisos"])
+def test_simulacion_apps_script(tmp_path, sin_permisos, variables):
     destino = tmp_path / "plantilla.xlsx"
     google.generar_plantilla(predeterminada(), destino)
     estructura = {}
@@ -34,7 +39,7 @@ def test_simulacion_apps_script(tmp_path, sin_permisos):
     archivo = tmp_path / "estructura.json"
     archivo.write_text(json.dumps(estructura, ensure_ascii=False), encoding="utf-8")
 
-    entorno = {**os.environ, "SIN_PERMISOS": "1"} if sin_permisos else None
+    entorno = {**os.environ, **variables, **({"SIN_PERMISOS": "1"} if sin_permisos else {})}
     resultado = subprocess.run(["node", str(SIMULACION), str(google.ARCHIVO_CODIGO), str(archivo)],
                                capture_output=True, text=True, encoding="utf-8", env=entorno)
     assert resultado.returncode == 0, resultado.stdout + resultado.stderr

@@ -80,7 +80,6 @@ function configurarLibro() {
     ui.alert('No se encontraron hojas de programa (fila 3 con encabezado «Programa» en la columna A).');
     return;
   }
-  escribirConsolidado_(ss, programas);
   hojaAuditoria_(ss);
   instalarDisparadores_(ss);
   props.setProperty('INSTALADO_POR', yo);
@@ -388,6 +387,10 @@ function sincronizarTodo_(ss, u) {
   const r = nuevoResumen_();
   const programas = hojasPrograma_(ss);
 
+  if (programas.length && ss.getSheetByName(CONFIG.HOJA_CONSOLIDADO)) {
+    const problema = escribirConsolidado_(ss, programas);
+    if (problema) r.fallos.push(problema);
+  }
   try {
     HOJAS_ESPECIALES.forEach(nombre => {
       const hoja = ss.getSheetByName(nombre);
@@ -742,6 +745,7 @@ function restaurarFormulaPrograma_(hoja, cols, r1, r2) {
   hoja.getRange(ini, col, formulas.length, 1).setFormulas(formulas);
 }
 
+/** Escribe la fórmula del Consolidado. Devuelve null si quedó funcionando, o el problema para mostrar. */
 function escribirConsolidado_(ss, programas) {
   const hoja = ss.getSheetByName(CONFIG.HOJA_CONSOLIDADO);
   if (!hoja) throw new Error(`No existe la hoja «${CONFIG.HOJA_CONSOLIDADO}»`);
@@ -756,12 +760,35 @@ function escribirConsolidado_(ss, programas) {
   const necesarias = fila - 1 + programas.reduce((s, h) => s + h.getMaxRows() - fila + 1, 0);
   if (hoja.getMaxRows() < necesarias) hoja.insertRowsAfter(hoja.getMaxRows(), necesarias - hoja.getMaxRows());
   hoja.getRange(fila, 1, hoja.getMaxRows() - fila + 1, cols.ancho).clearContent();
-  hoja.getRange(fila, 1).setFormula(
-    `=ARRAYFORMULA(IFNA(FILTER(VSTACK(${datos.join(',')}),VSTACK(${condiciones.join(',')})),"Sin registros"))`);
   hoja.getRange(2, 1).setValue('Se actualiza automáticamente con lo registrado en cada hoja de programa (solo lectura). ' +
     'Para filtrar, use Datos → Vistas de filtro.');
   const colFecha = cols.indice[CONFIG.COL_FECHA];
   hoja.getRange(fila, colFecha, hoja.getMaxRows() - fila + 1, 1).setNumberFormat('dd/mm/yyyy hh:mm');
+
+  // La sintaxis que acepta Sheets depende de la configuración regional del libro (con coma decimal,
+  // como España o Colombia, los argumentos se separan con «;») y de si la cuenta tiene VSTACK.
+  // Se prueba cada variante y se deja la primera que Sheets calcula sin error.
+  const apilarVstack = sep => partes => `VSTACK(${partes.join(sep)})`;
+  const apilarLlaves = partes => `{${partes.join(';')}}`;  // «;» apila filas en todas las configuraciones
+  const variantes = [
+    { sep: ',', apilar: apilarVstack(',') },
+    { sep: ';', apilar: apilarVstack(';') },
+    { sep: ',', apilar: apilarLlaves },
+    { sep: ';', apilar: apilarLlaves },
+  ];
+  const celda = hoja.getRange(fila, 1);
+  let error = '';
+  for (const v of variantes) {
+    celda.setFormula(`=ARRAYFORMULA(IFNA(FILTER(${v.apilar(datos)}${v.sep}${v.apilar(condiciones)})${v.sep}"Sin registros"))`);
+    SpreadsheetApp.flush();
+    const valor = String(celda.getDisplayValue());
+    if (!valor.startsWith('#')) return null;
+    error = valor;
+  }
+  return error === '#REF!'
+    ? 'El Consolidado no puede mostrar los datos porque hay algo escrito debajo de A4 en esa hoja: borre esas celdas ' +
+      'y use Aplicar permisos ahora.'
+    : `La fórmula del Consolidado da error (${error}) con todas las variantes probadas. Avise a quien mantiene la app.`;
 }
 
 function hojaAuditoria_(ss) {

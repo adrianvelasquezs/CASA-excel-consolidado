@@ -36,6 +36,16 @@ class Rango {
   celdas(fn) { for (let i = 0; i < this.nr; i++) for (let j = 0; j < this.nc; j++) fn(this.r + i, this.c + j, i, j); }
   getValues() { const o = []; for (let i = 0; i < this.nr; i++) { o.push([]); for (let j = 0; j < this.nc; j++) o[i].push(this.hoja.valor(this.r + i, this.c + j)); } return o; }
   getValue() { return this.hoja.valor(this.r, this.c); }
+  // Imita cómo Sheets calcula una fórmula según la configuración regional y las funciones disponibles.
+  getDisplayValue() {
+    const f = this.hoja.formulas[`${this.r},${this.c}`];
+    if (!f) return String(this.hoja.valor(this.r, this.c));
+    const sinTextos = f.replace(/"[^"]*"/g, '').replace(/'[^']*'/g, '');
+    if (process.env.LOCALE_PUNTO_Y_COMA && sinTextos.includes(',')) return '#ERROR!';
+    if (!process.env.LOCALE_PUNTO_Y_COMA && /[A-Z]+\([^{}]*;/.test(sinTextos)) return '#ERROR!';
+    if (process.env.SIN_VSTACK && f.includes('VSTACK(')) return '#NAME?';
+    return 'Sin registros';
+  }
   setValue(v) { this.celdas((r, c) => this.hoja.set(r, c, v)); return this; }
   setFormula(f) { this.hoja.formulas[`${this.r},${this.c}`] = f; return this; }
   setFormulas(m) { this.celdas((r, c, i, j) => { this.hoja.formulas[`${r},${c}`] = m[i][j]; }); return this; }
@@ -104,6 +114,7 @@ const ctx = {
   SpreadsheetApp: {
     getActiveSpreadsheet: () => ss,
     ProtectionType: { RANGE: 'RANGE', SHEET: 'SHEET' },
+    flush() {},
     getUi: () => ({ alert: (...a) => { alertas.push(a.filter(x => typeof x === 'string').join(' | ')); return 'YES'; }, ButtonSet: { OK: 1, YES_NO: 2, OK_CANCEL: 3 }, Button: { YES: 'YES', OK: 'OK' },
       createMenu: () => ({ addItem() { return this; }, addSeparator() { return this; }, addToUi() {} }) }),
   },
@@ -179,8 +190,11 @@ ok(H('Permisos').protecciones.length === 1, 'Hoja Permisos protegida (solo ADMIN
 ok(H('Usuarios').protecciones.length === 1 && H('Consolidado').protecciones.length === 1, 'Usuarios y Consolidado protegidas');
 ok(editar('prof.a@uniandes.edu.co', 'Permisos', 2, 4, 'SI') === 'BLOQUEADO', 'Profesor no edita la hoja Permisos');
 const formula = H('Consolidado').formulas['4,1'] || '';
-ok(formula.startsWith('=ARRAYFORMULA(IFNA(FILTER(VSTACK(') && formula.includes(`'Pregrado-CEMS'!A4:${ULTIMA}`), 'Fórmula del Consolidado (' + formula.length + ' caracteres)');
+ok(formula.startsWith('=ARRAYFORMULA(IFNA(FILTER(') && formula.includes(`'Pregrado-CEMS'!A4:${ULTIMA}`), 'Fórmula del Consolidado (' + formula.length + ' caracteres)');
 console.log('   ' + formula.slice(0, 160) + '…');
+const separador = process.env.LOCALE_PUNTO_Y_COMA ? ';' : ',';
+ok(formula.endsWith(`)${separador}"Sin registros"))`) && formula.includes(process.env.SIN_VSTACK ? 'FILTER({' : 'FILTER(VSTACK('),
+   `Consolidado: usa la variante que Sheets acepta (separador «${separador}», ${process.env.SIN_VSTACK ? 'llaves' : 'VSTACK'})`);
 console.log('   alerta: ' + alertas[alertas.length - 1].replace(/\n/g, '\n           '));
 ok(alertas[alertas.length - 1].includes('externo@gmail.com') && alertas[alertas.length - 1].includes('JEFE'), 'Avisa correo externo y rol inválido');
 
@@ -297,6 +311,13 @@ vm.runInContext('compartirConUsuarios()', ctx);
 ok(alertas[alertas.length - 1].includes('Permisos aplicados de nuevo'), 'Compartir vuelve a aplicar los permisos');
 const d2 = diag('gestor.afin@uniandes.edu.co');
 ok(d2.includes('Acceso al archivo: Editor') && !d2.includes('PROBLEMAS'), 'Diagnóstico tras compartir: sin problemas');
+
+H('Consolidado').formulas['4,1'] = "=ARRAYFORMULA(IFNA(FILTER(VSTACK('AFIN'!A4:AK),'roto'),\"x\"))";
+usuarioActual = DUENO;
+vm.runInContext('aplicarPermisos()', ctx);
+const reparada = H('Consolidado').formulas['4,1'];
+ok(reparada.includes("'Pregrado-CEMS'!A4") && reparada.endsWith('"Sin registros"))'),
+   'Aplicar permisos ahora reescribe un Consolidado dañado');
 
 console.log(fallos ? `\n${fallos} prueba(s) fallaron` : '\nTodas las pruebas pasaron');
 process.exit(fallos ? 1 : 0);

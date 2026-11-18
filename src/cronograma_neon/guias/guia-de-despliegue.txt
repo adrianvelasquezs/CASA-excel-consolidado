@@ -138,6 +138,12 @@ Necesito más filas en un programa
    Agregue filas al final de la hoja, copie hacia abajo la fórmula de
    la columna "Programa" y use Menú CASA > Aplicar permisos ahora.
 
+El Consolidado
+   Se actualiza solo: cada fila que se registra en una hoja de programa
+   aparece ahí en segundos. Menú CASA > Aplicar permisos ahora también
+   vuelve a escribir su fórmula (por ejemplo, después de agregar una
+   hoja de programa).
+
 Filtrar sin molestar a los demás
    Use Datos > Vistas de filtro. El filtro normal está bloqueado
    porque cambiaría la vista de todos.
@@ -336,6 +342,13 @@ No llegan los correos de Google ni las alertas
    desactivado para esos usuarios o el enrutamiento configurado hacia
    Microsoft. Pruebe con una alerta antes de depender de ellas, y
    comparta el enlace del archivo también por Teams.
+
+El Consolidado muestra un error (#ERROR!, #NAME? o #REF!)
+   Use Menú CASA > Aplicar permisos ahora: el script vuelve a escribir
+   la fórmula probando la sintaxis que acepta el libro (la configuración
+   regional, por ejemplo España o Colombia, cambia el separador de la
+   fórmula). Si el resumen dice que hay algo escrito debajo de A4 en el
+   Consolidado, bórrelo y repita.
 
 Todos ven todo
    Los permisos controlan quién modifica, no quién lee. Cualquiera con
