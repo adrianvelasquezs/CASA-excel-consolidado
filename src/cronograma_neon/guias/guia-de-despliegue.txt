@@ -131,6 +131,22 @@ Agregar un programa (con el libro ya en uso)
    No cree la hoja a mano: si sus columnas no son idénticas a las de
    los demás programas, el Consolidado falla.
 
+Quitar un programa (con el libro ya en uso)
+   Menú CASA > Quitar programa... y escriba su nombre. El script muestra
+   cuántos cursos tiene registrados y pregunta:
+     - SÍ = ARCHIVAR (recomendado): la hoja se oculta, queda solo para
+       ADMIN y conserva los datos. Sale del Consolidado, de los
+       permisos y de la lista de programas.
+     - NO = ELIMINAR la hoja y sus datos (pide confirmar). Solo se
+       recupera con Archivo > Historial de versiones.
+   Después ajuste en Usuarios a las personas que tenían ese programa
+   (el script le dice quiénes) y quítelo también en la app.
+
+Restaurar un programa archivado
+   Muestre la hoja oculta (menú Ver > Hojas ocultas), quite
+   "_Archivado " del nombre de la hoja y use Menú CASA > Aplicar
+   permisos ahora.
+
 Agregar, quitar o reordenar columnas
    Hágalo en la app y genere un libro nuevo. El libro que ya está en
    uso no cambia de estructura.

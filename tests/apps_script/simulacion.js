@@ -113,6 +113,7 @@ const ss = {
   getSheetByName: n => hojas.find(h => h.nombre === n) || null,
   insertSheet: n => { const h = new Hoja(n, 1000, 26); hojas.push(h); return h; },
   setActiveSheet: h => { ss.activa = h; return h; },
+  deleteSheet: h => { hojas.splice(hojas.indexOf(h), 1); },
   moveActiveSheet: pos => { hojas.splice(hojas.indexOf(ss.activa), 1); hojas.splice(pos - 1, 0, ss.activa); },
   getOwner: () => user(DUENO),
   getEditors: () => [...colaboradores].map(user),
@@ -122,6 +123,7 @@ const ss = {
 };
 const alertas = [];
 let respuestaPrompt = '';  // lo que «escribe» el usuario en los cuadros de diálogo
+const respuestasAlerta = [];  // botones que «pulsa» el usuario en los avisos (por defecto, Sí)
 const props = {};
 const ctx = {
   console: { log() {}, warn: m => console.log('   [warn]', m), error: m => console.log('   [error]', m) },
@@ -134,7 +136,7 @@ const ctx = {
       const b = { requireValueInList: l => { regla.lista = l; return b; }, setAllowInvalid: () => b, setHelpText: () => b, build: () => regla };
       return b;
     },
-    getUi: () => ({ prompt: () => ({ getSelectedButton: () => 'OK', getResponseText: () => respuestaPrompt }), alert: (...a) => { alertas.push(a.filter(x => typeof x === 'string').join(' | ')); return 'YES'; }, ButtonSet: { OK: 1, YES_NO: 2, OK_CANCEL: 3 }, Button: { YES: 'YES', OK: 'OK' },
+    getUi: () => ({ prompt: () => ({ getSelectedButton: () => 'OK', getResponseText: () => respuestaPrompt }), alert: (...a) => { alertas.push(a.filter(x => typeof x === 'string').join(' | ')); return respuestasAlerta.length ? respuestasAlerta.shift() : 'YES'; }, ButtonSet: { OK: 1, YES_NO: 2, OK_CANCEL: 3, YES_NO_CANCEL: 4 }, Button: { YES: 'YES', OK: 'OK', NO: 'NO', CANCEL: 'CANCEL' },
       createMenu: () => ({ addItem() { return this; }, addSeparator() { return this; }, addToUi() {} }) }),
   },
   Session: { getActiveUser: () => user(usuarioActual), getEffectiveUser: () => user(DUENO) },
@@ -359,6 +361,47 @@ for (const [nombre, esperado] of [['nuevo-prog', 'Ya existe'], ['Usuarios', 'res
   vm.runInContext('agregarPrograma()', ctx);
   ok(hojas.length === antes && alertas[alertas.length - 1].includes(esperado), `Rechaza el nombre «${nombre}» (${esperado})`);
 }
+
+console.log('\n11) Quitar programa');
+usuarioActual = DUENO;
+const consolidado = () => H('Consolidado').formulas['4,1'];
+H('MM').set(5, B, 'MM-1');
+respuestaPrompt = 'mm'; respuestasAlerta.push('YES');  // archivar
+vm.runInContext('quitarPrograma()', ctx);
+const archMM = hojas.find(h => h.nombre === '_Archivado MM');
+ok(alertas.some(a => a.startsWith('Quitar «MM»') && a.includes('1 curso(s) registrado(s)')), 'Muestra cuántos cursos tiene registrados');
+ok(archMM && archMM.oculta && archMM.valor(5, B) === 'MM-1', 'Archivar: la hoja se oculta y conserva los datos');
+ok(!consolidado().includes("'MM'!") && !consolidado().includes('_Archivado'), 'Archivar: sale del Consolidado');
+ok(archMM.protecciones.length === 1 && archMM.protecciones[0].desprot.length === 0, 'Archivar: queda una sola protección, de hoja completa');
+ok(!archMM.puedeEditar('gestor.afin@uniandes.edu.co', 5, B) && !archMM.puedeEditar('analista.casa@uniandes.edu.co', 5, L),
+   'Archivar: nadie fuera de ADMIN puede editarla');
+ok(!H('Usuarios').validaciones.slice(-1)[0].regla.lista.includes('MM'), 'Archivar: sale de la lista de programas de Usuarios');
+
+archMM.protecciones[0].desprot = [archMM.getRange(4, B, 10, 1)];  // alguien le quita protección
+vm.runInContext('restaurarPermisos()', ctx);
+ok(archMM.protecciones[0].desprot.length === 0, 'La restauración diaria vuelve a proteger la hoja archivada');
+
+respuestaPrompt = 'MSCM'; respuestasAlerta.push('NO', 'NO');  // eliminar, pero no confirma
+vm.runInContext('quitarPrograma()', ctx);
+ok(H('MSCM'), 'Eliminar sin confirmar: no borra nada');
+respuestaPrompt = 'MSCM'; respuestasAlerta.push('NO', 'YES');  // eliminar y confirmar
+vm.runInContext('quitarPrograma()', ctx);
+ok(!H('MSCM') && !consolidado().includes("'MSCM'!"), 'Eliminar: borra la hoja y la saca del Consolidado');
+respuestaPrompt = 'MF'; respuestasAlerta.push('CANCEL');
+vm.runInContext('quitarPrograma()', ctx);
+ok(H('MF') && consolidado().includes("'MF'!"), 'Cancelar: no cambia nada');
+respuestaPrompt = 'NOEXISTE';
+vm.runInContext('quitarPrograma()', ctx);
+ok(alertas[alertas.length - 1].startsWith('No se encontró el programa'), 'Programa inexistente: avisa y muestra los programas');
+
+respuestaPrompt = 'MF'; respuestasAlerta.push('YES');
+vm.runInContext('quitarPrograma()', ctx);
+ok(alertas[alertas.length - 1].includes('prof.mf@uniandes.edu.co'), 'Avisa qué personas de Usuarios tenían el programa');
+const archMF = hojas.find(h => h.nombre === '_Archivado MF');
+archMF.setName('MF'); archMF.showSheet();  // restaurar: quitar el prefijo y mostrar
+vm.runInContext('aplicarPermisos()', ctx);
+ok(consolidado().includes("'MF'!") && editar('prof.mf@uniandes.edu.co', 'MF', 40, B, 'MF-9') === 'EDITADO' && H('MF').valor(40, B) === 'MF-9',
+   'Restaurar: al quitar el prefijo y aplicar permisos el programa vuelve completo');
 
 H('Consolidado').formulas['4,1'] = "=ARRAYFORMULA(IFNA(FILTER(VSTACK('AFIN'!A4:AK),'roto'),\"x\"))";
 usuarioActual = DUENO;

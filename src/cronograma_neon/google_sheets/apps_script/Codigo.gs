@@ -40,6 +40,7 @@ const ROLES = ['ADMIN', 'CASA', 'GESTOR', 'PROFESOR'];
 const HOJAS_ESPECIALES = [CONFIG.HOJA_USUARIOS, CONFIG.HOJA_CONSOLIDADO, CONFIG.HOJA_INSTRUCCIONES, CONFIG.HOJA_PERMISOS,
   CONFIG.HOJA_AUDITORIA];
 const SIN_EDITORES = '---'; // columna que solo edita ADMIN
+const PREFIJO_ARCHIVO = '_Archivado ';  // las hojas que empiezan por «_» no cuentan como programas
 // Respaldo para libros sin hoja «Permisos»: permisos según el color del encabezado.
 const COLORES_PERMISO = { '#00b0f0': 'PG-', '#c6e0b4': '--C', '#ffe699': 'PGC' };
 const INICIO = Date.now();
@@ -56,6 +57,7 @@ function onOpen() {
     .addSeparator()
     .addItem('Aplicar permisos ahora', 'aplicarPermisos')
     .addItem('Agregar programa…', 'agregarPrograma')
+    .addItem('Quitar programa…', 'quitarPrograma')
     .addItem('Diagnosticar un correo…', 'diagnosticarCorreo')
     .addItem('Ver auditoría', 'verAuditoria')
     .addToUi();
@@ -154,6 +156,76 @@ function agregarPrograma() {
     'Consolidado.\n\nSiguiente paso: en la hoja Usuarios agregue a sus gestores y profesores con el programa ' +
     `«${nombre}» y use CASA → 2. Compartir.\n\nPara que este programa también esté en los libros que se generen ` +
     'en el futuro, agréguelo en la app (pestaña Programas).\n\n' + resumen_(r, leerUsuarios_(ss)), ui.ButtonSet.OK);
+}
+
+function quitarPrograma() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const u = exigirAdmin_(ss);
+  if (!u) return;
+  const programas = hojasPrograma_(ss);
+  const respuesta = ui.prompt('Quitar programa', 'Nombre del programa (hoja) que quiere quitar:', ui.ButtonSet.OK_CANCEL);
+  if (respuesta.getSelectedButton() !== ui.Button.OK) return;
+  const escrito = normalizar_(respuesta.getResponseText());
+  const hoja = programas.find(h => claveTexto_(h.getName()) === claveTexto_(escrito));
+  if (!hoja) {
+    ui.alert('No se encontró el programa', `«${escrito}» no es una hoja de programa. Programas: ` +
+      programas.map(h => h.getName()).join(', '), ui.ButtonSet.OK);
+    return;
+  }
+  if (programas.length === 1) {
+    ui.alert('No se puede quitar', 'Es el único programa del libro.', ui.ButtonSet.OK);
+    return;
+  }
+  const nombre = hoja.getName();
+  const cols = columnas_(hoja, leerPermisos_(ss));
+  const filas = hoja.getMaxRows() - CONFIG.PRIMERA_FILA + 1;
+  const registradas = hoja.getRange(CONFIG.PRIMERA_FILA, 1, filas, cols.ancho).getValues()
+    .filter(f => cols.identifican.some(c => f[c - 1] !== '' && f[c - 1] !== null)).length;
+  const personas = Object.keys(u.programas).includes(nombre)
+    ? [...u.programas[nombre].gestores, ...u.programas[nombre].profesores] : [];
+
+  const decision = ui.alert(`Quitar «${nombre}»`,
+    `El programa tiene ${registradas} curso(s) registrado(s).\n\n` +
+    'SÍ = ARCHIVAR (recomendado): la hoja se oculta y queda solo para ADMIN; sale del Consolidado, de los ' +
+    'permisos y de la lista de programas, pero conserva los datos.\n\n' +
+    'NO = ELIMINAR la hoja y sus datos (solo se recuperan con Archivo → Historial de versiones).\n\n' +
+    'CANCELAR = no hacer nada.', ui.ButtonSet.YES_NO_CANCEL);
+  if (decision !== ui.Button.YES && decision !== ui.Button.NO) return;
+  if (decision === ui.Button.NO && ui.alert('Confirmar eliminación',
+    `¿Eliminar definitivamente la hoja «${nombre}» con ${registradas} curso(s) registrado(s)?`,
+    ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+
+  let hecho;
+  if (decision === ui.Button.YES) {
+    const archivada = archivarHojaPrograma_(ss, hoja, u);
+    hecho = `«${nombre}» quedó archivada en la hoja oculta «${archivada}» (solo ADMIN). Para recuperarla: muestre la ` +
+      `hoja, quítele «${PREFIJO_ARCHIVO}» del nombre y use CASA → Aplicar permisos ahora.`;
+  } else {
+    ss.deleteSheet(hoja);
+    hecho = `La hoja «${nombre}» se eliminó.`;
+  }
+  actualizarListaProgramas_(ss);
+  const usuarios = leerUsuarios_(ss);
+  const r = sincronizarTodo_(ss, usuarios);
+  ui.alert('Programa quitado', hecho +
+    (personas.length ? `\n\nEstas personas de la hoja Usuarios tenían el programa «${nombre}»; ajuste o borre sus ` +
+      `filas:\n${personas.map(c => '  • ' + c).join('\n')}` : '') +
+    '\n\nQuítelo también en la app (pestaña Programas) para los libros que se generen en el futuro.\n\n' +
+    resumen_(r, usuarios), ui.ButtonSet.OK);
+}
+
+/** Oculta la hoja con un nombre que empieza por «_» (deja de contar como programa) y la deja solo para ADMIN. */
+function archivarHojaPrograma_(ss, hoja, u) {
+  let nombre = (PREFIJO_ARCHIVO + hoja.getName()).slice(0, 31);
+  for (let i = 2; ss.getSheetByName(nombre); i++) nombre = (PREFIJO_ARCHIVO + i + ' ' + hoja.getName()).slice(0, 31);
+  hoja.getProtections(SpreadsheetApp.ProtectionType.RANGE)
+    .filter(p => tipoProteccion_(p))
+    .forEach(p => p.remove());
+  hoja.setName(nombre);
+  protegerHoja_(hoja, [...u.admins], [], nuevoResumen_());
+  hoja.hideSheet();
+  return nombre;
 }
 
 /** Devuelve por qué el nombre no sirve para un programa nuevo, o null si sirve. */
@@ -467,6 +539,8 @@ function sincronizarTodo_(ss, u) {
       const hoja = ss.getSheetByName(nombre);
       if (hoja) protegerHoja_(hoja, [...u.admins], [], r);
     });
+    ss.getSheets().filter(h => h.getName().startsWith(PREFIJO_ARCHIVO))  // programas archivados: solo ADMIN
+      .forEach(h => protegerHoja_(h, [...u.admins], [], r));
     const permisos = leerPermisos_(ss);
     permisos.errores.forEach(e => r.fallos.push(e));
     programas.forEach(hoja => sincronizarHoja_(ss, hoja, u, r, permisos));
