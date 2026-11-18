@@ -86,13 +86,15 @@ Object.entries(est).forEach(([nombre, info]) => {
   if (info.filas) info.filas.forEach((fila, i) => fila.forEach((v, j) => { if (v !== '') h.set(i + 1, j + 1, v); }));
   hojas.push(h);
 });
+const colaboradores = new Set([DUENO]);  // personas con acceso de edición al archivo
 const ss = {
   getSheets: () => hojas,
   getSheetByName: n => hojas.find(h => h.nombre === n) || null,
   insertSheet: n => { const h = new Hoja(n, 1000, 26); hojas.push(h); return h; },
   getOwner: () => user(DUENO),
-  getEditors: () => [user(DUENO)],
-  addEditor: () => {}, toast: () => {}, getUrl: () => 'https://docs.google.com/spreadsheets/d/x',
+  getEditors: () => [...colaboradores].map(user),
+  getViewers: () => [],
+  addEditor: c => colaboradores.add(c), toast: () => {}, getUrl: () => 'https://docs.google.com/spreadsheets/d/x',
   getId: () => 'x',
 };
 const alertas = [];
@@ -102,7 +104,7 @@ const ctx = {
   SpreadsheetApp: {
     getActiveSpreadsheet: () => ss,
     ProtectionType: { RANGE: 'RANGE', SHEET: 'SHEET' },
-    getUi: () => ({ alert: (...a) => { alertas.push(a.filter(x => typeof x === 'string').join(' | ')); return 'YES'; }, ButtonSet: { OK: 1, YES_NO: 2 }, Button: { YES: 'YES' },
+    getUi: () => ({ alert: (...a) => { alertas.push(a.filter(x => typeof x === 'string').join(' | ')); return 'YES'; }, ButtonSet: { OK: 1, YES_NO: 2, OK_CANCEL: 3 }, Button: { YES: 'YES', OK: 'OK' },
       createMenu: () => ({ addItem() { return this; }, addSeparator() { return this; }, addToUi() {} }) }),
   },
   Session: { getActiveUser: () => user(usuarioActual), getEffectiveUser: () => user(DUENO) },
@@ -142,12 +144,29 @@ const U = H('Usuarios');
   ['prof.mf@uniandes.edu.co', 'PROFESOR', 'MF'],
   ['externo@gmail.com', 'PROFESOR', 'MF'],
   ['mal@uniandes.edu.co', 'JEFE', ''],
+  ['gestora.min@uniandes.edu.co', 'GESTOR', ' afín '],      // minúsculas, tilde y espacios
+  ['gestora.mal@uniandes.edu.co', 'GESTOR', 'AFIN Finanzas'], // no coincide con ninguna hoja
 ].forEach((f, i) => f.forEach((v, j) => U.set(i + 2, j + 1, v)));
 
 const B = col('AFIN', 'Código de curso'), D = col('AFIN', 'Curso'), L = col('AFIN', 'Número de Competencia a evaluar');
 const REG = col('AFIN', 'Registrado por'), PROG = col('AFIN', 'Programa');
 const REPORTE = col('AFIN', '¿Se entregó reporte?'), RAZONES = col('AFIN', 'Razones de porqué no se realizó medición');
 const ULTIMA = letra(est.AFIN.header.filter(([v]) => v).length);
+
+if (process.env.SIN_PERMISOS) {
+  // Libro generado con una versión anterior (sin hoja Permisos): los permisos salen de los colores.
+  console.log('\nLibro sin hoja Permisos (respaldo por colores)');
+  usuarioActual = DUENO;
+  vm.runInContext('configurarLibro()', ctx);
+  ok(alertas[alertas.length - 1].includes('se usan los colores de los encabezados'), 'Avisa que usa los colores de los encabezados');
+  ok(editar('gestor.afin@uniandes.edu.co', 'AFIN', 10, B, 'X') === 'EDITADO' && H('AFIN').valor(10, B) === 'X', 'Gestor edita columna azul');
+  ok(editar('prof.a@uniandes.edu.co', 'AFIN', 11, B, 'Y') === 'EDITADO' && H('AFIN').valor(11, B) === 'Y', 'Profesor edita columna azul');
+  ok(editar('analista.casa@uniandes.edu.co', 'AFIN', 10, L, 'C1') === 'EDITADO' && H('AFIN').valor(10, L) === 'C1', 'CASA edita columna verde');
+  ok(editar('prof.a@uniandes.edu.co', 'AFIN', 11, L, 'x') === 'BLOQUEADO', 'Profesor no edita columna verde');
+  ok(editar('analista.casa@uniandes.edu.co', 'AFIN', 12, B, 'x') === 'BLOQUEADO', 'CASA no edita columna azul');
+  console.log(fallos ? `\n${fallos} prueba(s) fallaron` : '\nTodas las pruebas pasaron');
+  process.exit(fallos ? 1 : 0);
+}
 
 console.log('\n1) Configurar libro (dueño)');
 usuarioActual = DUENO;
@@ -253,6 +272,31 @@ ok(editar('prof.a@uniandes.edu.co', 'AFIN', 5, COMP, 'x') === 'BLOQUEADO' &&
 ok(resumenPermisos.includes('no está en la hoja Permisos'), 'Avisa de la columna que no está en Permisos');
 ok(editar('prof.a@uniandes.edu.co', 'AFIN', 5, CRN, '9', { saltarProteccion: true }) && H('AFIN').valor(5, CRN) === '1',
    'Si un profesor se salta la protección de «CRN», se revierte');
+
+console.log('\n9) Problemas frecuentes de configuración');
+usuarioActual = DUENO;
+vm.runInContext('aplicarPermisos()', ctx);
+const res9 = alertas[alertas.length - 1];
+ok(res9.startsWith('Permisos aplicados | ⚠️ HAY') && res9.includes('«AFIN Finanzas» no coincide con ninguna hoja'),
+   'Programa que no coincide: aviso destacado al inicio del resumen');
+ok(editar('gestora.min@uniandes.edu.co', 'AFIN', 60, B, 'AFIN-9') === 'EDITADO' && H('AFIN').valor(60, B) === 'AFIN-9',
+   'Programa escrito « afín »: la gestora edita AFIN igual');
+ok(editar('gestora.mal@uniandes.edu.co', 'AFIN', 61, B, 'x') === 'BLOQUEADO', 'Programa que no coincide: sigue bloqueada (y se avisa)');
+editar('gestor.principal@uniandes.edu.co', 'AFIN', 62, B, 'z', { saltarProteccion: true });
+ok(H('AFIN').valor(62, B) === '' && String(H('_Auditoria').valor(H('_Auditoria').getLastRow(), 5)).includes('no está en la hoja Usuarios'),
+   'Correo distinto al de Usuarios (alias): se revierte y la auditoría lo explica');
+const diag = c => vm.runInContext(`diagnostico_(SpreadsheetApp.getActiveSpreadsheet(), leerUsuarios_(SpreadsheetApp.getActiveSpreadsheet()), '${c}')`, ctx);
+const d1 = diag('gestor.afin@uniandes.edu.co');
+ok(d1.includes('No tiene acceso al archivo'), 'Diagnóstico: detecta que el archivo no se ha compartido');
+ok(d1.includes('GESTOR de AFIN') && d1.includes('AFIN: puede editar'), 'Diagnóstico: muestra rol y columnas editables');
+ok(diag('nadie@uniandes.edu.co').includes('No aparece en la hoja Usuarios'), 'Diagnóstico: correo que no está en Usuarios');
+const pr = H('AFIN').protecciones.find(p => p.desc.includes('colPG-|'));
+pr.editores.delete('gestor.afin@uniandes.edu.co');
+ok(diag('gestor.afin@uniandes.edu.co').includes('aún no figura en 1 protección'), 'Diagnóstico: detecta protección donde falta');
+vm.runInContext('compartirConUsuarios()', ctx);
+ok(alertas[alertas.length - 1].includes('Permisos aplicados de nuevo'), 'Compartir vuelve a aplicar los permisos');
+const d2 = diag('gestor.afin@uniandes.edu.co');
+ok(d2.includes('Acceso al archivo: Editor') && !d2.includes('PROBLEMAS'), 'Diagnóstico tras compartir: sin problemas');
 
 console.log(fallos ? `\n${fallos} prueba(s) fallaron` : '\nTodas las pruebas pasaron');
 process.exit(fallos ? 1 : 0);

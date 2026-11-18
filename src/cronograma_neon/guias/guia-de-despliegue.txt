@@ -65,6 +65,10 @@ Paso 2. Convertirlo a Google Sheets
 
 Paso 3. Llenar la hoja "Usuarios"
    - Una fila por persona: correo, rol y programa(s).
+   - El correo debe ser exactamente el que la persona usa para entrar
+     a Google (no un alias).
+   - El programa debe ser el nombre de una hoja del libro (por ejemplo
+     AFIN). Mayúsculas y tildes no importan.
    - Incluya al menos a los ADMIN y al equipo CASA.
    - Si el archivo está en una unidad compartida (sin dueño),
      agréguese usted como ADMIN antes del paso 5.
@@ -87,9 +91,13 @@ Paso 5. Menú CASA > 1. Configurar libro
      existen o correos externos.
 
 Paso 6. Menú CASA > 2. Compartir con los correos de Usuarios
-   - Da acceso de edición a todas las personas de la hoja Usuarios.
-     Como las protecciones ya están puestas, cada quien solo podrá
-     modificar lo suyo.
+   - Da acceso de Editor al archivo a todas las personas de la hoja
+     Usuarios y luego vuelve a aplicar los permisos.
+   - El acceso de Editor es NECESARIO y NO da acceso a todo: las
+     protecciones solo dejan modificar las columnas de cada rol. Con
+     acceso de lectura o comentarios nadie puede editar nada.
+   - Lea el resumen que aparece al final: si empieza con "HAY ... PUNTO(S)
+     QUE REVISAR", corrija eso antes de seguir.
    - Comparta además el enlace del archivo por Teams: el aviso de
      Google puede no llegar a Outlook (ver PROBLEMAS FRECUENTES).
 
@@ -113,6 +121,11 @@ Cambiar quién edita una columna (con el libro ya en uso)
 Agregar, quitar o reordenar columnas
    Hágalo en la app y genere un libro nuevo. El libro que ya está en
    uso no cambia de estructura.
+
+Revisar por qué alguien no puede editar
+   Menú CASA > Diagnosticar un correo... y escriba el correo con el que
+   la persona entra a Google. Muestra si tiene acceso al archivo, su
+   rol, qué columnas puede editar y qué falta corregir.
 
 Ver intentos de edición no permitidos
    Menú CASA > Ver auditoría.
@@ -283,8 +296,35 @@ No aparece el menú Extensiones (o no aparece el menú CASA)
    trabaje en la copia nueva e instale ahí el script (paso 4).
 
 "Solicitar acceso" al abrir el archivo
-   La persona está con una cuenta personal de Gmail. Debe cambiar a su
-   cuenta @uniandes.edu.co.
+   El archivo no está compartido con esa cuenta. Puede ser que:
+     - todavía no se usó Menú CASA > 2. Compartir (o la persona no está
+       en la hoja Usuarios), o
+     - la persona entró con otra cuenta (por ejemplo, Gmail personal).
+       Debe cambiar a su cuenta @uniandes.edu.co.
+   No apruebe la solicitud como "Lector": agregue a la persona en
+   Usuarios y use Menú CASA > 2. Compartir.
+
+¿Darles acceso de Editor no les da acceso a todo el documento?
+   No. Para editar cualquier celda, Google exige acceso de Editor al
+   archivo; las protecciones del script limitan después qué puede
+   modificar cada persona. Pruébelo: con la cuenta de una gestora,
+   intente editar una columna verde (CASA) o la hoja de otro programa;
+   Google debe bloquearlo. Sí pueden VER todo (ver "Todos ven todo").
+
+Una persona no puede editar ni sus propias columnas
+   Use Menú CASA > Diagnosticar un correo... Las causas más comunes:
+     1. Tiene acceso de lectura o comentarios, no de Editor.
+     2. Su programa en Usuarios no coincide con el nombre de una hoja
+        (por ejemplo "AFIN Finanzas" en vez de "AFIN").
+     3. Su correo en Usuarios no es el mismo con el que entra a Google
+        (alias o cuenta personal). En la auditoría aparece "no está en
+        la hoja Usuarios".
+     4. Se le dio acceso después de aplicar los permisos: use Menú CASA
+        > Aplicar permisos ahora.
+     5. El libro no tiene la hoja "Permisos" porque se generó con una
+        versión anterior de la app: el script usa los colores de los
+        encabezados. Para controlar columna por columna, genere el
+        libro de nuevo con la versión actual.
 
 "No tienes permiso para editar"
    Esa columna no le corresponde a su rol, o la fila es de otra

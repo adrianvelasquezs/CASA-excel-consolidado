@@ -40,6 +40,8 @@ const ROLES = ['ADMIN', 'CASA', 'GESTOR', 'PROFESOR'];
 const HOJAS_ESPECIALES = [CONFIG.HOJA_USUARIOS, CONFIG.HOJA_CONSOLIDADO, CONFIG.HOJA_INSTRUCCIONES, CONFIG.HOJA_PERMISOS,
   CONFIG.HOJA_AUDITORIA];
 const SIN_EDITORES = '---'; // columna que solo edita ADMIN
+// Respaldo para libros sin hoja «Permisos»: permisos según el color del encabezado.
+const COLORES_PERMISO = { '#00b0f0': 'PG-', '#c6e0b4': '--C', '#ffe699': 'PGC' };
 const INICIO = Date.now();
 
 // ---------------------------------------------------------------------------
@@ -53,6 +55,7 @@ function onOpen() {
     .addItem('2. Compartir con los correos de «Usuarios»', 'compartirConUsuarios')
     .addSeparator()
     .addItem('Aplicar permisos ahora', 'aplicarPermisos')
+    .addItem('Diagnosticar un correo…', 'diagnosticarCorreo')
     .addItem('Ver auditoría', 'verAuditoria')
     .addToUi();
 }
@@ -113,9 +116,91 @@ function compartirConUsuarios() {
   nuevos.forEach(c => {
     try { ss.addEditor(c); } catch (err) { fallos.push(`${c}: ${err.message}`); }
   });
-  ui.alert(`Acceso otorgado a ${nuevos.length - fallos.length} correo(s).` +
+  // Con el acceso ya otorgado, se vuelven a aplicar los permisos para que las personas nuevas
+  // queden como editoras de sus columnas (antes de tener acceso, Google puede no aceptarlas).
+  const r = sincronizarTodo_(ss, leerUsuarios_(ss));
+  ui.alert('Compartir', `Acceso de edición otorgado a ${nuevos.length - fallos.length} correo(s).` +
     (fallos.length ? `\n\nNo se pudo con:\n${fallos.join('\n')}` : '') +
-    '\n\nGoogle puede enviar una notificación al correo; además comparta el enlace por Teams o Outlook.');
+    '\n\nEl acceso de edición al archivo es necesario: las protecciones limitan qué celdas puede modificar cada uno.' +
+    '\nComparta el enlace también por Teams (el aviso de Google puede no llegar a Outlook).' +
+    '\n\nPermisos aplicados de nuevo:\n' + resumen_(r, leerUsuarios_(ss)), ui.ButtonSet.OK);
+}
+
+function diagnosticarCorreo() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const u = exigirAdmin_(ss);
+  if (!u) return;
+  const respuesta = ui.prompt('Diagnosticar un correo', 'Correo de la persona, tal como entra a Google:', ui.ButtonSet.OK_CANCEL);
+  if (respuesta.getSelectedButton() !== ui.Button.OK) return;
+  const correo = respuesta.getResponseText().trim().toLowerCase();
+  if (correo) ui.alert('Diagnóstico de ' + correo, diagnostico_(ss, u, correo), ui.ButtonSet.OK);
+}
+
+/** Revisa por qué una persona podría no poder editar: acceso al archivo, rol, columnas y protecciones. */
+function diagnostico_(ss, u, correo) {
+  const bien = [];
+  const problemas = [];
+
+  const editores = ss.getEditors().map(x => x.getEmail().toLowerCase());
+  const lectores = ss.getViewers().map(x => x.getEmail().toLowerCase());
+  if (editores.includes(correo) || correo === correoDueno_()) {
+    bien.push('Acceso al archivo: Editor.');
+  } else if (lectores.includes(correo)) {
+    problemas.push('Solo tiene acceso de lectura o comentarios. Necesita acceso de Editor (menú CASA → 2. Compartir); ' +
+      'las protecciones limitan qué celdas puede modificar.');
+  } else {
+    problemas.push('No tiene acceso al archivo con este correo. Use menú CASA → 2. Compartir.');
+  }
+  if (!correo.endsWith('@' + CONFIG.DOMINIO)) {
+    problemas.push(`No es un correo @${CONFIG.DOMINIO}: el script no puede identificarlo y revierte sus ediciones.`);
+  }
+
+  const roles = [];
+  if (u.admins.has(correo)) roles.push('ADMIN');
+  if (u.casa.has(correo)) roles.push('CASA');
+  Object.keys(u.programas).forEach(p => {
+    if (u.programas[p].gestores.has(correo)) roles.push(`GESTOR de ${p}`);
+    if (u.programas[p].profesores.has(correo)) roles.push(`PROFESOR de ${p}`);
+  });
+  if (roles.length) bien.push('Rol en Usuarios: ' + roles.join(', ') + '.');
+  else problemas.push('No aparece en la hoja Usuarios con un rol y programa válidos (revise el correo exacto, el rol y el programa).');
+
+  if (u.admins.has(correo)) {
+    bien.push('Como ADMIN puede editar todo.');
+  } else {
+    const permisos = leerPermisos_(ss);
+    hojasPrograma_(ss).forEach(hoja => {
+      const r = rolesDe_(u, correo, hoja.getName());
+      if (!r.casa && !r.gestor && !r.profesor) return;
+      const cols = columnas_(hoja, permisos);
+      const editables = cols.tipos
+        .map((t, i) => (t && t !== 'sistema' && rolPuedeEditar_(t, r) ? cols.nombres[i] : null))
+        .filter(Boolean);
+      if (!editables.length) {
+        problemas.push(`${hoja.getName()}: su rol no puede editar ninguna columna (revise la hoja Permisos).`);
+        return;
+      }
+      bien.push(`${hoja.getName()}: puede editar ${editables.length} columna(s): ` +
+        editables.slice(0, 5).join(', ') + (editables.length > 5 ? '…' : '.'));
+      const sinAgregar = hoja.getProtections(SpreadsheetApp.ProtectionType.RANGE).filter(p => {
+        const tipo = tipoProteccion_(p) || '';
+        return tipo.startsWith('col') && rolPuedeEditar_(tipo.slice(3), r) &&
+          !p.getEditors().map(x => x.getEmail().toLowerCase()).includes(correo);
+      });
+      if (sinAgregar.length) {
+        problemas.push(`${hoja.getName()}: aún no figura en ${sinAgregar.length} protección(es) de sus columnas. ` +
+          'Use menú CASA → Aplicar permisos ahora.');
+      }
+    });
+  }
+
+  const texto = problemas.length
+    ? '⚠️ PROBLEMAS:\n' + problemas.map(p => '  • ' + p).join('\n')
+    : '✓ No se encontraron problemas.';
+  return texto + '\n\n' + bien.map(b => '✓ ' + b).join('\n') +
+    '\n\nSi todo está bien y aun así no puede editar: confirme que entra a Google con este mismo correo ' +
+    '(no con un alias ni con una cuenta personal).';
 }
 
 function verAuditoria() {
@@ -205,6 +290,9 @@ function procesarEdicion_(e) {
 function motivoRechazo_(u, correo, hoja, cols, r1, r2, tipos) {
   const roles = rolesDe_(u, correo, hoja.getName());
   if (!correo) return 'Usuario no identificado (cuenta fuera de @' + CONFIG.DOMINIO + ')';
+  if (!u.todos.includes(correo) && !u.admins.has(correo)) {
+    return `El correo ${correo} no está en la hoja Usuarios (¿entró con otra cuenta o con un alias de su correo?)`;
+  }
   if (r1 < CONFIG.PRIMERA_FILA) return 'Edición de títulos o encabezados';
   if (tipos.has('sistema') || tipos.has('fuera')) return 'Edición de columnas del sistema o fuera del área de registro';
   for (const tipo of tipos) {
@@ -299,9 +387,6 @@ function incidente_(e, u, correo, cols, motivo) {
 function sincronizarTodo_(ss, u) {
   const r = nuevoResumen_();
   const programas = hojasPrograma_(ss);
-  const nombres = new Set(programas.map(h => h.getName()));
-  Object.keys(u.programas).filter(p => !nombres.has(p))
-    .forEach(p => u.errores.push(`Programa «${p}» de la hoja Usuarios no existe como hoja`));
 
   try {
     HOJAS_ESPECIALES.forEach(nombre => {
@@ -321,7 +406,7 @@ function sincronizarTodo_(ss, u) {
 function sincronizarHoja_(ss, hoja, u, r, permisos) {
   const nombre = hoja.getName();
   const cols = columnas_(hoja, permisos || leerPermisos_(ss));
-  cols.desconocidas.forEach(c => r.fallos.push(`«${c}» (hoja ${nombre}) no está en la hoja Permisos: solo ADMIN puede editarla`));
+  cols.desconocidas.forEach(c => r.fallos.push(`La columna «${c}» no está en la hoja Permisos: solo ADMIN puede editarla`));
   const n = hoja.getMaxRows() - CONFIG.PRIMERA_FILA + 1;
   const g = u.programas[nombre] || { gestores: new Set(), profesores: new Set() };
   const admins = [...u.admins];
@@ -443,17 +528,23 @@ function nuevoResumen_() {
 }
 
 function resumen_(r, u) {
-  const lineas = [
-    `Protecciones creadas: ${r.creadas} · actualizadas: ${r.actualizadas} · sin cambios: ${r.sinCambios} · eliminadas: ${r.eliminadas}`,
-  ];
-  if (!r.completo) lineas.push('\n⚠️ Se alcanzó el límite de tiempo. Ejecute «Aplicar permisos ahora» de nuevo para terminar.');
-  if (u && u.errores.length) lineas.push('\nRevise la hoja Usuarios:\n' + u.errores.join('\n'));
+  const problemas = [];
+  if (!r.completo) problemas.push('Se alcanzó el límite de tiempo. Ejecute «Aplicar permisos ahora» de nuevo para terminar.');
+  if (u && u.errores.length) problemas.push('Hoja Usuarios:\n' + u.errores.map(e => '  • ' + e).join('\n'));
   if (u && u.externos.length) {
-    lineas.push(`\nCorreos fuera de @${CONFIG.DOMINIO} (el script no puede identificarlos al editar, ` +
-      `así que sus ediciones se revertirán):\n` + u.externos.join('\n'));
+    problemas.push(`Correos fuera de @${CONFIG.DOMINIO} (el script no puede identificarlos; sus ediciones se revierten):\n` +
+      u.externos.map(e => '  • ' + e).join('\n'));
   }
-  if (r.fallos.length) lineas.push('\nAvisos:\n' + r.fallos.slice(0, 20).join('\n'));
-  return lineas.join('\n');
+  const avisos = [...new Set(r.fallos)];  // el mismo aviso puede repetirse en cada hoja de programa
+  if (avisos.length) {
+    problemas.push('Avisos:\n' + avisos.slice(0, 20).map(e => '  • ' + e).join('\n') +
+      (avisos.length > 20 ? `\n  … y ${avisos.length - 20} más` : ''));
+  }
+  const conteo = `Protecciones creadas: ${r.creadas} · actualizadas: ${r.actualizadas} · ` +
+    `sin cambios: ${r.sinCambios} · eliminadas: ${r.eliminadas}`;
+  if (!problemas.length) return '✓ Sin problemas.\n\n' + conteo;
+  return `⚠️ HAY ${problemas.length} PUNTO(S) QUE REVISAR (pueden impedir que alguien edite):\n\n` +
+    problemas.join('\n\n') + '\n\n' + conteo + '\n\nPara revisar a una persona: menú CASA → Diagnosticar un correo…';
 }
 
 // ---------------------------------------------------------------------------
@@ -464,6 +555,8 @@ function leerUsuarios_(ss) {
   const hoja = ss.getSheetByName(CONFIG.HOJA_USUARIOS);
   if (!hoja) throw new Error(`No existe la hoja «${CONFIG.HOJA_USUARIOS}»`);
   const u = { admins: new Set(), casa: new Set(), programas: {}, todos: [], externos: [], errores: [] };
+  const hojas = {};
+  hojasPrograma_(ss).forEach(h => { hojas[claveTexto_(h.getName())] = h.getName(); });
   const dueno = correoDueno_();
   if (dueno) u.admins.add(dueno);
 
@@ -484,7 +577,13 @@ function leerUsuarios_(ss) {
     else if (rol === 'CASA') u.casa.add(correo);
     else {
       if (!programas.length) return u.errores.push(`Fila ${n}: ${rol} requiere programa`);
-      programas.forEach(p => {
+      programas.forEach(escrito => {
+        const p = hojas[claveTexto_(escrito)];
+        if (!p) {
+          u.errores.push(`Fila ${n}: el programa «${escrito}» no coincide con ninguna hoja ` +
+            `(hojas: ${Object.values(hojas).join(', ')})`);
+          return;
+        }
         u.programas[p] = u.programas[p] || { gestores: new Set(), profesores: new Set() };
         u.programas[p][rol === 'GESTOR' ? 'gestores' : 'profesores'].add(correo);
       });
@@ -525,7 +624,9 @@ function leerPermisos_(ss) {
   const resultado = { columnas: {}, errores: [] };
   const hoja = ss.getSheetByName(CONFIG.HOJA_PERMISOS);
   if (!hoja) {
-    resultado.errores.push(`No existe la hoja «${CONFIG.HOJA_PERMISOS}»: solo ADMIN puede editar las columnas.`);
+    resultado.sinHoja = true;
+    resultado.errores.push(`No existe la hoja «${CONFIG.HOJA_PERMISOS}» (libro generado con una versión anterior de la ` +
+      'app): se usan los colores de los encabezados (azul = programa, verde = CASA, amarillo = ambos, gris = solo ADMIN).');
     return resultado;
   }
   const ultima = hoja.getLastRow();
@@ -576,7 +677,9 @@ function hojasPrograma_(ss) {
  */
 function columnas_(hoja, permisos) {
   const total = hoja.getLastColumn();
-  const nombres = hoja.getRange(CONFIG.FILA_ENCABEZADO, 1, 1, total).getValues()[0].map(normalizar_);
+  const encabezado = hoja.getRange(CONFIG.FILA_ENCABEZADO, 1, 1, total);
+  const nombres = encabezado.getValues()[0].map(normalizar_);
+  const fondos = permisos.sinHoja ? encabezado.getBackgrounds()[0].map(c => String(c).toLowerCase()) : [];
   let ancho = 0;
   nombres.forEach((nombre, i) => { if (nombre) ancho = i + 1; });
   const sistema = [CONFIG.COL_PROGRAMA, CONFIG.COL_REGISTRADO, CONFIG.COL_FECHA];
@@ -585,6 +688,7 @@ function columnas_(hoja, permisos) {
   const tipos = nombres.slice(0, ancho).map((nombre, i) => {
     if (!nombre) return null;
     if (sistema.includes(nombre)) return 'sistema';
+    if (permisos.sinHoja) return COLORES_PERMISO[fondos[i]] || SIN_EDITORES;
     const permiso = permisos.columnas[nombre];
     if (!permiso) {
       desconocidas.push(nombre);
@@ -699,6 +803,11 @@ function correoDueno_() {
 
 function normalizar_(v) {
   return String(v).replace(/\s+/g, ' ').trim();
+}
+
+/** Para comparar nombres sin importar mayúsculas, espacios ni tildes: «  Afín » → «afin». */
+function claveTexto_(v) {
+  return normalizar_(v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
 function letraColumna_(n) {
